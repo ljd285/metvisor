@@ -1,15 +1,14 @@
 # Hoja de ruta: pasos para construir el visor
 
 ## Fase 0 · Decisiones (hechas)
-- Stack: JavaScript ES modules en el navegador, sin bundler; Leaflet para el mapa.
+- Stack: JavaScript clásico en el navegador, sin Node ni bundler; Leaflet para el mapa.
 - Datos: ICON-EU vía Open-Meteo (`/v1/dwd-icon`, `models=icon_eu`), que sí cubre Iberia (ICON-D2 no).
 
-## Fase 1 · Esqueleto ✅
-1. Servidor estático y estructura de proyecto.
-2. Mapa base Leaflet centrado en Iberia.
-3. Retículo regular de puntos (`GRID_STEP`) y cliente API con lotes de `CHUNK_SIZE`.
-4. Capa canvas con interpolación bilineal + rampas de color + leyenda.
-5. Selector de variable y slider temporal (48 h).
+## Fase 1 · Comparador básico ✅
+1. Página única (`index.html` + `js/app.js`), sin servidor ni compilación.
+2. Dos mapas Leaflet sincronizados sobre Iberia.
+3. Malla de puntos descargada por lotes; interpolación bilineal, paletas y leyenda.
+4. Selector de modelo y variable por mapa; slider horario común (48 h).
 
 ## Fase 2 · Calidad de datos y rendimiento
 1. Verificar la respuesta real de la API y ajustar `GRID_STEP`/`CHUNK_SIZE` a los límites de Open-Meteo.

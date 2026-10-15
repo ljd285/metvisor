@@ -3,25 +3,40 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Metvisor · ICON-EU</title>
+  <title>Metvisor · Comparador de modelos</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="css/style.css">
+  <style>
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+    body { display: flex; flex-direction: column; }
+    header { padding: 8px 12px; background: #1d3557; color: #fff; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    header h1 { margin: 0; font-size: 18px; }
+    header input[type=range] { width: 320px; }
+    #status { font-size: 12px; opacity: .8; }
+    main { flex: 1; display: flex; min-height: 0; }
+    .panel { flex: 1; position: relative; min-width: 0; }
+    .panel + .panel { border-left: 3px solid #1d3557; }
+    .bar { position: absolute; top: 8px; left: 50px; z-index: 1000; background: rgba(255,255,255,.92);
+           padding: 6px 8px; border-radius: 6px; display: flex; gap: 6px; box-shadow: 0 1px 5px rgba(0,0,0,.3); }
+    .map { position: absolute; inset: 0; }
+    .legend { position: absolute; bottom: 18px; left: 10px; z-index: 1000; background: rgba(255,255,255,.92);
+              padding: 4px 8px; border-radius: 6px; font-size: 11px; width: 180px; }
+    .legend div { height: 10px; border-radius: 2px; margin: 2px 0; }
+    .legend span { display: flex; justify-content: space-between; }
+    @media (max-width: 700px) { main { flex-direction: column; } .panel + .panel { border-left: 0; border-top: 3px solid #1d3557; } }
+  </style>
 </head>
 <body>
-  <div id="map"></div>
-  <aside id="panel">
+  <header>
     <h1>Metvisor</h1>
-    <label>Variable
-      <select id="variable"></select>
-    </label>
-    <label>Hora (UTC): <output id="timeLabel">–</output>
-      <input id="timeSlider" type="range" min="0" max="0" value="0">
-    </label>
-    <div id="legend"></div>
-    <p id="status">Cargando…</p>
-    <small>Datos: modelo ICON-EU (DWD) vía <a href="https://open-meteo.com">Open-Meteo</a> (CC BY 4.0)</small>
-  </aside>
+    <label>Hora (UTC): <b id="timeLabel">–</b>
+      <input id="timeSlider" type="range" min="0" max="0" value="0"></label>
+    <span id="status">Cargando…</span>
+  </header>
+  <main>
+    <section class="panel" id="p0"></section>
+    <section class="panel" id="p1"></section>
+  </main>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script type="module" src="src/app.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
