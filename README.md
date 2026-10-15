@@ -5,7 +5,7 @@ JavaScript puro en el navegador; los datos se generan con un proceso programado 
 publican como imágenes en GitHub Pages. Plan completo: [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Estado
-Fase 0: mapa base en `web/` y despliegue en Pages.
+Fase 1: interfaz con panel lateral de variables, barra de tiempo con animación y leyenda, sobre datos de muestra sintéticos (`web/js/sample.js`). El pipeline real llega en la Fase 2.
 
 ## Ver la web en local
 Abre un servidor estático en `web/` (el mapa carga recursos externos, así que no basta `file://` en todos los navegadores):

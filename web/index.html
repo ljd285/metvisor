@@ -8,9 +8,35 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="map"></div>
-  <header id="topbar"><strong>Metvisor</strong> <span>ICON-EU · DWD</span></header>
+  <aside id="sidebar" aria-label="Variables">
+    <div class="brand">Metvisor</div>
+    <div id="modelPill" class="pill">–</div>
+    <nav id="vars"></nav>
+    <p class="credit">Datos: Deutscher Wetterdienst (ICON-EU)<br>Mapa: © OpenStreetMap</p>
+  </aside>
+
+  <div id="stage">
+    <div id="map"></div>
+    <button id="menuBtn" type="button" aria-label="Variables" aria-controls="sidebar" aria-expanded="false">☰</button>
+    <div id="timeChip" class="chip mono">–</div>
+    <div id="sampleBadge" class="chip" hidden>Datos de muestra</div>
+    <div id="legend" class="panel">
+      <div id="legendTitle" class="mono"></div>
+      <div id="legendBar"></div>
+      <div id="legendTicks" class="mono"></div>
+    </div>
+    <div id="timebar" class="panel">
+      <div class="row">
+        <button id="play" type="button" aria-label="Reproducir">▶</button>
+        <input id="slider" type="range" min="0" max="0" value="0" aria-label="Hora de la previsión">
+        <span id="lead" class="mono">+0 h</span>
+      </div>
+      <div id="days" class="mono"></div>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="js/sample.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
