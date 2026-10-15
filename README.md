@@ -5,13 +5,16 @@ JavaScript puro en el navegador; los datos se generan con un proceso programado 
 publican como imágenes en GitHub Pages. Plan completo: [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Estado
-Fase 1: interfaz con panel lateral de variables, barra de tiempo con animación y leyenda, sobre datos de muestra sintéticos (`web/js/sample.js`). El pipeline real llega en la Fase 2.
+- Fase 0 y 1: mapa, panel de variables, barra de tiempo y leyenda (hecho).
+- Fase 2: pipeline `pipeline/` que genera imágenes ICON-EU reales; el workflow las construye en cada despliegue y cada 6 h.
+  Sin `web/data/`, la web muestra datos de muestra sintéticos (etiqueta naranja).
 
 ## Ver la web en local
 Abre un servidor estático en `web/` (el mapa carga recursos externos, así que no basta `file://` en todos los navegadores):
 
 ```bash
 python3 -m http.server 8000 --directory web   # http://localhost:8000
+# con datos reales: primero  python -m pipeline.build  (ver pipeline/README.md)
 ```
 
 ## Publicar en GitHub Pages

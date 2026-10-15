@@ -54,8 +54,19 @@
 
   var frames = {};
   function frame(v, i) {
+    if (!manifest.sample) {
+      var s = String(manifest.steps[i]).padStart(3, '0');
+      return 'data/frames/' + v.id + '/' + s + '.png';
+    }
     var k = v.id + ':' + i;
     return frames[k] || (frames[k] = Sample.render(v, manifest.steps[i]));
+  }
+  function preload(v) {
+    if (manifest.sample) return;
+    for (var d = 1; d <= 3; d++) {
+      var i = state.t + d;
+      if (i < manifest.steps.length) new Image().src = frame(v, i);
+    }
   }
 
   function update() {
@@ -71,6 +82,7 @@
     var mid = Math.round((v.min + v.max) / 2);
     $('legendTicks').innerHTML = '<span>' + v.min + '</span><span>' + mid + '</span><span>' + v.max + '</span>';
     if (source) source.updateImage({ url: frame(v, state.t), coordinates: coords() });
+    preload(v);
     writeHash();
   }
 
@@ -107,10 +119,18 @@
     });
   }
 
-  fetch('manifest.json').then(function (r) { return r.json(); }).then(function (m) {
+  // Datos reales (generados por el pipeline); si no existen, manifiesto de muestra.
+  function loadManifest() {
+    return fetch('data/manifest.json').then(function (r) {
+      if (!r.ok) throw new Error('sin datos reales');
+      return r.json();
+    }).catch(function () { return fetch('manifest.json').then(function (r) { return r.json(); }); });
+  }
+
+  loadManifest().then(function (m) {
     manifest = m;
-    // Pasada de muestra: última hora múltiplo de 6 en UTC.
-    runTime = Math.floor(Date.now() / 21600e3) * 21600e3;
+    // Pasada real, o de muestra: última hora múltiplo de 6 en UTC.
+    runTime = m.runTime ? Date.parse(m.runTime) : Math.floor(Date.now() / 21600e3) * 21600e3;
     readHash();
     $('sampleBadge').hidden = !m.sample;
     $('slider').max = m.steps.length - 1;
