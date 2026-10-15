@@ -1,16 +1,14 @@
 # Metvisor
 
-Comparador de salidas de modelos meteorológicos, 100 % JavaScript, sin instalación.
-Datos en abierto de [Open-Meteo](https://open-meteo.com) (ICON del DWD, ECMWF, GFS, ARPEGE).
+Visor meteorológico, 100 % JavaScript, sin instalación.
+Datos en abierto de [Open-Meteo](https://open-meteo.com), empezando por ICON-EU del DWD.
 
 ## Cómo usarlo
 
 Abre `index.html` con doble clic en el navegador. No hace falta Node, npm ni servidor.
 
-- Dos mapas lado a lado, sincronizados (zoom y desplazamiento).
-- Cada mapa tiene su selector de **modelo** y de **variable**.
-- Un único deslizador de **hora** (48 h) controla los dos.
-- Por defecto: ICON-EU (izquierda) frente a ECMWF IFS (derecha) sobre la península ibérica.
+- Un mapa con selector de **modelo** (ICON-EU por defecto) y de **variable**.
+- Un deslizador de **hora** (48 h).
 
 ## Archivos
 

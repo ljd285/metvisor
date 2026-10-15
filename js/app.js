@@ -1,4 +1,4 @@
-// Metvisor: comparador de modelos meteorológicos (Open-Meteo). Sin módulos ni compilación.
+// Metvisor: visor meteorológico (Open-Meteo). Sin módulos ni compilación.
 (function () {
   const BOUNDS = { south: 35.8, north: 44.0, west: -9.8, east: 4.6 };
   const STEP = 1.0;      // grados entre puntos de la malla
@@ -104,7 +104,7 @@
   const opts = o => Object.keys(o).map(k => '<option value="' + k + '">' + (o[k].label || o[k]) + '</option>').join('');
   const panels = [];
 
-  ['p0', 'p1'].forEach((id, n) => {
+  ['p0'].forEach((id, n) => {
     const el = document.getElementById(id);
     el.innerHTML = '<div class="map"></div><div class="bar"><select class="model">' + opts(MODELS) +
       '</select><select class="var">' + opts(VARS) + '</select></div><div class="legend"><span><i></i><i></i></span><div></div></div>';
@@ -114,19 +114,10 @@
     const layer = new Field().addTo(map);
     const p = { el, map, layer, data: null,
       model: el.querySelector('.model'), vari: el.querySelector('.var') };
-    if (n === 1) { p.model.value = 'ecmwf_ifs025'; }
     p.model.onchange = () => reload(p);
     p.vari.onchange = () => show(p);
     panels.push(p);
   });
-
-  // sincronizar movimiento de los dos mapas
-  let busy = false;
-  panels.forEach((p, i) => p.map.on('move', () => {
-    if (busy) return; busy = true;
-    const o = panels[1 - i].map; o.setView(p.map.getCenter(), p.map.getZoom(), { animate: false });
-    busy = false;
-  }));
 
   function show(p) {
     if (!p.data) return;

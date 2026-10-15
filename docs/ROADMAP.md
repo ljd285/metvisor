@@ -6,9 +6,11 @@
 
 ## Fase 1 · Comparador básico ✅
 1. Página única (`index.html` + `js/app.js`), sin servidor ni compilación.
-2. Dos mapas Leaflet sincronizados sobre Iberia.
+2. Mapa Leaflet sobre Iberia.
 3. Malla de puntos descargada por lotes; interpolación bilineal, paletas y leyenda.
-4. Selector de modelo y variable por mapa; slider horario común (48 h).
+4. Selector de modelo y variable; slider horario (48 h).
+
+(Comparar salidas de modelos queda como mejora futura, no como base.)
 
 ## Fase 2 · Calidad de datos y rendimiento
 1. Verificar la respuesta real de la API y ajustar `GRID_STEP`/`CHUNK_SIZE` a los límites de Open-Meteo.
