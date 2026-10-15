@@ -1,26 +1,30 @@
 # Metvisor
 
-Visor meteorológico, 100 % JavaScript, sin instalación.
-Datos en abierto de [Open-Meteo](https://open-meteo.com), empezando por ICON-EU del DWD.
+Visor meteorológico estilo wxcharts para la península ibérica, con datos del modelo ICON-EU del DWD.
+JavaScript puro en el navegador; los datos se generan con un proceso programado (GitHub Actions) y se
+publican como imágenes en GitHub Pages. Plan completo: [`docs/PLAN.md`](docs/PLAN.md).
 
-## Cómo usarlo
+## Estado
+Fase 0: mapa base en `web/` y despliegue en Pages.
 
-Abre `index.html` con doble clic en el navegador. No hace falta Node, npm ni servidor.
+## Ver la web en local
+Abre un servidor estático en `web/` (el mapa carga recursos externos, así que no basta `file://` en todos los navegadores):
 
-- Un mapa con selector de **modelo** (ICON-EU por defecto) y de **variable**.
-- Un deslizador de **hora** (48 h).
-
-## Archivos
-
-```
-index.html   página y estilos
-js/app.js    descarga de datos, interpolación y mapas (Leaflet por CDN)
-docs/ROADMAP.md
+```bash
+python3 -m http.server 8000 --directory web   # http://localhost:8000
 ```
 
-## Notas
+## Publicar en GitHub Pages
+1. Fusiona esta rama en `main`.
+2. En GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. El workflow `.github/workflows/pages.yml` publica `web/` en cada push a `main`.
 
-- ICON-EU (~6,5 km) cubre Iberia; ICON-D2 (2 km) solo Europa central.
-- No he podido probarlo contra la API real desde el entorno de desarrollo: si algo falla, el mensaje
-  de error aparece arriba junto al deslizador.
-- Atribución: Open-Meteo (CC BY 4.0), DWD y demás servicios de origen, © OpenStreetMap.
+## Estructura
+```
+web/        sitio estático (lo que se publica)
+pipeline/   generación de datos (Fase 2)
+docs/       plan de trabajo
+.github/    workflows
+```
+
+Atribución: Deutscher Wetterdienst (ICON-EU), © OpenStreetMap.

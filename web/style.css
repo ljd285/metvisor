@@ -1,0 +1,8 @@
+html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+#map { position: absolute; inset: 0; }
+#topbar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 2; padding: 8px 14px;
+  background: #1d3557; color: #fff; display: flex; gap: 12px; align-items: baseline;
+}
+#topbar span { font-size: 12px; opacity: .75; }
+.maplibregl-ctrl-top-left, .maplibregl-ctrl-top-right { margin-top: 40px; }
