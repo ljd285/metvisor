@@ -89,6 +89,7 @@
     $('reliefToggle').checked = state.relief;
     $('reliefToggle').addEventListener('change', function () { state.relief = this.checked; applyRelief(); writeHash(); });
   }
+  function openMenu() { document.body.classList.add('menu-open'); $('menuBtn').setAttribute('aria-expanded', 'true'); }
   function closeMenu() { document.body.classList.remove('menu-open'); $('menuBtn').setAttribute('aria-expanded', 'false'); }
 
   // Antigüedad de la pasada: ICON-EU publica cada 6 h con ~4 h de retraso, así que hasta ~10 h es normal.
@@ -139,11 +140,14 @@
   var valueData = {};   // variable → {px, w, h}
   var loading = {};
   function ensureValues(v) {
-    if (!manifest.grid || valueData[v.id] || loading[v.id]) return;
-    loading[v.id] = true;
-    ValueGrid.load('data/values/' + v.id + '.png').then(function (d) { valueData[v.id] = d; })
-      .catch(function () { /* sin rejilla: no se muestra valor */ })
-      .then(function () { loading[v.id] = false; });
+    if (!manifest.grid) return Promise.resolve();
+    if (valueData[v.id]) return Promise.resolve();
+    if (!loading[v.id]) {
+      loading[v.id] = ValueGrid.load('data/values/' + v.id + '.png')
+        .then(function (d) { valueData[v.id] = d; })
+        .catch(function () { /* sin rejilla: no se muestra valor */ });
+    }
+    return loading[v.id];
   }
   function valueAt(lngLat) {
     var v = manifest.variables[state.v], d = valueData[v.id];
@@ -154,18 +158,34 @@
   function fmt(x, unit) {
     return x.toFixed(DECIMALS[unit] != null ? DECIMALS[unit] : 0) + ' ' + unit;
   }
-  var raf = 0;
+  // El recuadro de valor se descarga al primer movimiento o toque (son ~5 MB por variable: no se piden si no se usan).
+  var lastEvent = null;
+  function renderValue(e) {
+    var el = $('cursor'), v = manifest.variables[state.v];
+    if (!manifest.grid) { el.hidden = true; return; }
+    lastEvent = e;
+    el.style.left = e.point.x + 'px'; el.style.top = e.point.y + 'px';
+    if (!valueData[v.id]) {   // primera vez: se descarga y se pinta al terminar
+      el.textContent = '…'; el.hidden = false;
+      ensureValues(v).then(function () { if (lastEvent === e && state.v === manifest.variables.indexOf(v)) renderValue(e); });
+      return;
+    }
+    var val = valueAt(e.lngLat);
+    if (val == null) { el.hidden = true; return; }
+    el.textContent = fmt(val, v.unit);
+    el.hidden = false;
+  }
+  var raf = 0, hideTimer = 0, touchUI = window.matchMedia && matchMedia('(pointer: coarse)').matches;
   function onMove(e) {
-    if (raf) return;
-    raf = requestAnimationFrame(function () {
-      raf = 0;
-      var el = $('cursor');
-      var val = manifest.grid ? valueAt(e.lngLat) : null;
-      if (val == null) { el.hidden = true; return; }
-      el.textContent = fmt(val, manifest.variables[state.v].unit);
-      el.style.left = e.point.x + 'px'; el.style.top = e.point.y + 'px';
-      el.hidden = false;
-    });
+    if (raf || touchUI) return;
+    raf = requestAnimationFrame(function () { raf = 0; renderValue(e); });
+  }
+  // En táctil no hay «pasar el ratón»: el valor aparece al tocar y se oculta a los pocos segundos.
+  function onTap(e) {
+    if (!touchUI) return;
+    renderValue(e);
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(function () { $('cursor').hidden = true; }, 3500);
   }
 
   // ---------- Isobaras ----------
@@ -313,6 +333,7 @@
     var v = manifest.variables[state.v];
     Array.prototype.forEach.call($('vars').querySelectorAll('button'), function (b) {
       b.classList.toggle('on', +b.dataset.i === state.v);
+      b.setAttribute('aria-pressed', +b.dataset.i === state.v);
     });
     $('slider').value = state.t;
     $('lead').textContent = '+' + manifest.steps[state.t] + ' h';
@@ -322,7 +343,7 @@
     var mid = Math.round((v.min + v.max) / 2);
     $('legendTicks').innerHTML = '<span>' + v.min + '</span><span>' + mid + '</span><span>' + v.max + '</span>';
     if (source) source.updateImage({ url: frame(v, state.t), coordinates: coords() });
-    preload(v); ensureValues(v); applyIso(); drawMeteogram();
+    preload(v); applyIso(); drawMeteogram();
     writeHash();
   }
 
@@ -369,7 +390,7 @@
     window.addEventListener('resize', sizeWind);
     map.on('mousemove', onMove);
     map.on('mouseout', function () { $('cursor').hidden = true; });
-    map.on('click', function (e) { openMeteogram(e.lngLat); });
+    map.on('click', function (e) { onTap(e); openMeteogram(e.lngLat); });
     map.on('load', function () {
       var v = manifest.variables[state.v];
       map.addSource('field', { type: 'image', url: frame(v, state.t), coordinates: coords() });
@@ -425,15 +446,17 @@
     initSearch();
     $('mgBody').addEventListener('click', onMeteogramClick);
     $('menuBtn').addEventListener('click', function () {
-      var open = document.body.classList.toggle('menu-open'); this.setAttribute('aria-expanded', open);
+      if (document.body.classList.contains('menu-open')) closeMenu(); else openMenu();
     });
+    $('menuClose').addEventListener('click', closeMenu);
+    $('scrim').addEventListener('click', closeMenu);
     document.addEventListener('keydown', function (e) {
       if (e.target.tagName === 'INPUT') return;
       if (e.key === '/') { e.preventDefault(); $('search').focus(); }
       if (e.key === ' ') { e.preventDefault(); togglePlay(); }
       if (e.key === 'ArrowRight') { state.t = Math.min(manifest.steps.length - 1, state.t + 1); update(); }
       if (e.key === 'ArrowLeft') { state.t = Math.max(0, state.t - 1); update(); }
-      if (e.key === 'Escape') closeMeteogram();
+      if (e.key === 'Escape') { closeMenu(); closeMeteogram(); }
     });
   }).catch(function (e) {
     document.body.insertAdjacentHTML('beforeend', '<p style="position:absolute;top:50%;left:20px;color:#b00">No se pudo cargar el visor: ' + e.message + '</p>');

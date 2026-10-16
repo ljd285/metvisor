@@ -5,7 +5,7 @@
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html, body { margin: 0; height: 100%; font: 13px/1.4 var(--sans); }
+html, body { margin: 0; height: 100%; overscroll-behavior: none; font: 13px/1.4 var(--sans); }
 body { display: grid; grid-template-columns: 200px 1fr; overflow: hidden; }
 .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
@@ -34,7 +34,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid #7cc4e6; outline-
 .check { display: flex; gap: 8px; align-items: center; padding: 4px 8px; cursor: pointer; }
 .check input { accent-color: #4fb3dc; }
 
-#searchBox { left: 50%; top: 12px; transform: translateX(-50%); width: min(320px, calc(100% - 340px)); background: none; }
+#searchBox { z-index: 3; left: 50%; top: 12px; transform: translateX(-50%); width: min(320px, calc(100% - 340px)); background: none; }
 #search { width: 100%; padding: 8px 12px; border: 0; border-radius: 6px; background: var(--ui); color: var(--ui-fg); font: inherit; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
 #search::placeholder { color: var(--muted); }
 #results { list-style: none; margin: 4px 0 0; padding: 4px; background: var(--ui); border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.4); max-height: 50vh; overflow-y: auto; }
@@ -81,17 +81,56 @@ button:focus-visible, input:focus-visible { outline: 2px solid #7cc4e6; outline-
 #days { position: relative; height: 14px; margin: 0 76px 0 40px; font-size: 10px; color: var(--muted); }
 #days span { position: absolute; top: 0; border-left: 1px solid var(--ui-line); padding-left: 4px; white-space: nowrap; }
 
+/* Pantallas bajas (móvil apaisado): el meteograma pasa a un lateral con scroll para no tapar buscador ni barra de tiempo. */
+@media (max-height: 520px) {
+  #meteo { left: auto; right: 12px; top: 72px; bottom: 84px; width: min(340px, 52%); overflow-y: auto; }
+  #mgLegend, #mgNote { display: none; }
+  /* Escritorio estrecho y bajo (móvil apaisado): el buscador va a la derecha de la hora, sin solaparla. */
+  #searchBox { left: 214px; transform: none; width: calc(100% - 214px - 196px); }
+}
+
+/* Controles táctiles */
+@media (pointer: coarse) {
+  button, select { touch-action: manipulation; }
+  #vars button, #regions button { padding: 12px 10px; }
+  .check { padding: 10px 8px; }
+  .check input { width: 20px; height: 20px; }
+  #play { width: 44px; height: 44px; font-size: 14px; }
+  #mgClose { width: 36px; height: 36px; }
+  #results li { padding: 12px 10px; }
+  .side-sel select { padding: 10px; }
+  #cursor { transform: translate(-50%, -58px); font-size: 14px; padding: 5px 10px; }
+  .maplibregl-ctrl-top-right { display: none; }   /* en táctil se hace zoom con los dedos */
+  #slider { -webkit-appearance: none; appearance: none; height: 36px; background: transparent; }
+  #slider::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--ui-line); }
+  #slider::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; margin-top: -11px; border-radius: 50%; background: #4fb3dc; border: 2px solid #fff; }
+  #slider::-moz-range-track { height: 6px; border-radius: 3px; background: var(--ui-line); }
+  #slider::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #4fb3dc; border: 2px solid #fff; }
+}
+
+.side-top { display: flex; justify-content: space-between; align-items: center; }
+#menuClose, #scrim { display: none; }
+
 @media (max-width: 720px) {
   body { grid-template-columns: 1fr; }
-  #sidebar { position: absolute; top: 0; bottom: 0; left: 0; width: 220px; transform: translateX(-100%); transition: transform .2s; }
-  body.menu-open #sidebar { transform: none; }
-  #menuBtn { display: block; position: absolute; z-index: 3; left: 12px; top: 12px; width: 36px; height: 36px; border: 0; border-radius: 6px; background: var(--ui); color: var(--ui-fg); font-size: 18px; }
-  #timeChip { left: 56px; }
-  #sampleBadge { left: 56px; top: 100px; }
-  #searchBox { left: 12px; right: 12px; top: 56px; width: auto; transform: none; }
-  #legend { width: 130px; }
-  #days { margin: 0 70px 0 40px; }
-  #meteo { bottom: 100px; }
-  #cursor { display: none; }
+  #sidebar { position: absolute; top: 0; bottom: 0; left: 0; width: min(290px, 86%); transform: translateX(-100%); transition: transform .2s; padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(12px, env(safe-area-inset-left)); }
+  body.menu-open #sidebar { transform: none; box-shadow: 4px 0 16px rgba(0,0,0,.4); }
+  #menuClose { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 6px; background: var(--ui-soft); color: inherit; font-size: 16px; cursor: pointer; }
+  body.menu-open #scrim { display: block; position: absolute; inset: 0; z-index: 4; background: rgba(8,16,24,.45); }
+  #menuBtn { display: block; position: absolute; z-index: 3; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); width: 40px; height: 40px; border: 0; border-radius: 6px; background: var(--ui); color: var(--ui-fg); font-size: 20px; }
+  /* Fila 1: menú + buscador. Fila 2: hora + leyenda. */
+  #searchBox { left: calc(max(12px, env(safe-area-inset-left)) + 48px); right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); width: auto; transform: none; }
+  #search { font-size: 16px; height: 40px; }   /* 16 px evita el zoom automático de iOS al enfocar */
+  #timeChip { left: max(12px, env(safe-area-inset-left)); top: calc(max(12px, env(safe-area-inset-top)) + 52px); }
+  #legend { top: calc(max(12px, env(safe-area-inset-top)) + 52px); right: max(12px, env(safe-area-inset-right)); width: 150px; }
+  #legendTitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #sampleBadge { left: max(12px, env(safe-area-inset-left)); top: calc(max(12px, env(safe-area-inset-top)) + 92px); }
+  #timebar { left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); }
+  #days { margin: 0 70px 0 50px; }
+  #meteo { left: max(12px, env(safe-area-inset-left)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 92px); max-height: calc(100% - 230px); overflow-y: auto; }
+  #cursor { display: block; }
+}
+@media (max-width: 720px) and (max-height: 520px) {
+  #meteo { left: auto; right: max(12px, env(safe-area-inset-right)); top: 112px; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 84px); max-height: none; width: min(340px, 60%); }
 }
 @media (prefers-reduced-motion: reduce) { #sidebar { transition: none; } }

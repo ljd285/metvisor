@@ -14,6 +14,8 @@ publican como imágenes en GitHub Pages. Plan completo: [`docs/PLAN.md`](docs/PL
   transparentes (`hide_below` en `pipeline/config.py`); buscador de lugares (Open-Meteo Geocoding) y marcador arrastrable
   para el meteograma.
 
+- Móvil: menú lateral con botón ✕ y fondo para cerrarlo, buscador a ancho completo, controles táctiles de 40+ px, valor al tocar el mapa,
+  diseño apaisado, márgenes seguros (notch) y descarga de rejillas solo al usarlas.
 - Fase 5 (en curso): costas además de fronteras sobre el campo; aviso de antigüedad de la pasada en el panel; el workflow guarda
   la última pasada buena (si la descarga falla se despliega esa, el trabajo termina en rojo y GitHub avisa por correo);
   commit semanal en la rama `keepalive` para que GitHub no desactive el cron tras 60 días sin actividad.
