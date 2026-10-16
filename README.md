@@ -14,6 +14,9 @@ publican como imágenes en GitHub Pages. Plan completo: [`docs/PLAN.md`](docs/PL
   transparentes (`hide_below` en `pipeline/config.py`); buscador de lugares (Open-Meteo Geocoding) y marcador arrastrable
   para el meteograma.
 
+- Fase 5 (en curso): costas además de fronteras sobre el campo; aviso de antigüedad de la pasada en el panel; el workflow guarda
+  la última pasada buena (si la descarga falla se despliega esa, el trabajo termina en rojo y GitHub avisa por correo);
+  commit semanal en la rama `keepalive` para que GitHub no desactive el cron tras 60 días sin actividad.
 - Fase 4: fronteras por encima del campo (`web/geo/borders.json`, Natural Earth), nuevas variables (humedad, nieve, CAPE, isoterma 0 °C,
   T 850 hPa, geopotencial 500 hPa) y viento animado con partículas.
 
@@ -38,7 +41,7 @@ docs/       plan de trabajo
 .github/    workflows
 ```
 
-Fronteras: Natural Earth (dominio público), vía el paquete npm `world-atlas`; se regeneran con `tools/make_borders.mjs`.
+Fronteras y costas: Natural Earth (dominio público), vía el paquete npm `world-atlas`; se regeneran con `tools/make_borders.mjs`.
 Atribución: Deutscher Wetterdienst (ICON-EU), Open-Meteo, © OpenStreetMap, Esri, Mapzen/AWS Terrain Tiles.
 Nota: CARTO dejó de servir teselas sin clave (mostraba «API KEY REQUIRED»), por eso se usa Esri u OSM. Ambos son para uso ligero/no comercial;
 si el proyecto crece habrá que contratar un proveedor de teselas o autoalojarlas (p. ej. OpenFreeMap, MapTiler).

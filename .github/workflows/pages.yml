@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # solo para el commit semanal de keepalive
   pages: write
   id-token: write
 
@@ -35,12 +35,46 @@ jobs:
         # En las ejecuciones programadas solo se refrescan los datos; los tests no deben bloquearlas.
         if: github.event_name != 'schedule'
         run: python -m unittest discover -s pipeline/tests -t .
+      # Recupera la última pasada buena: si la generación falla, se despliega esa (con aviso de antigüedad en la web)
+      # en lugar de los datos de muestra.
+      - name: Restaurar última pasada buena
+        uses: actions/cache/restore@v4
+        with:
+          path: web/data
+          key: icon-eu-data-restore
+          restore-keys: icon-eu-data-
       - name: Generar datos ICON-EU
-        # Si falla (p. ej. el DWD aún no ha publicado), se despliega la web con datos de muestra.
+        id: build
         continue-on-error: true
         run: python -m pipeline.build --out web/data
+      - name: Guardar pasada buena
+        if: steps.build.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: web/data
+          key: icon-eu-data-${{ github.run_id }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web
       - id: deployment
         uses: actions/deploy-pages@v4
+      # GitHub desactiva los workflows programados tras 60 días sin actividad en el repositorio: un commit semanal lo evita.
+      - name: Mantener activo el repositorio
+        if: github.event_name == 'schedule'
+        run: |
+          case "$(date -u +%u-%H)" in 1-04|1-05)
+            git checkout --orphan keepalive
+            git rm -rf --cached . > /dev/null
+            date -u +%FT%TZ > keepalive.txt
+            git add keepalive.txt
+            git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -m "keepalive"
+            git push --force origin keepalive
+          ;;
+          esac
+      # Con el sitio ya desplegado, si los datos no se pudieron renovar se marca el trabajo como fallido
+      # para que GitHub envíe el aviso por correo.
+      - name: Avisar si los datos no se renovaron
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "::error::No se pudieron generar los datos ICON-EU; se desplegó la última pasada guardada (o datos de muestra si no había)."
+          exit 1

@@ -75,6 +75,7 @@
       closeMenu();
     });
     $('modelPill').textContent = manifest.model + ' · ' + runLabel();
+    showFreshness();
     $('isoRow').hidden = !manifest.isobars;
     $('isoToggle').checked = state.iso;
     $('isoToggle').addEventListener('change', function () { state.iso = this.checked; applyIso(); writeHash(); });
@@ -89,6 +90,17 @@
     $('reliefToggle').addEventListener('change', function () { state.relief = this.checked; applyRelief(); writeHash(); });
   }
   function closeMenu() { document.body.classList.remove('menu-open'); $('menuBtn').setAttribute('aria-expanded', 'false'); }
+
+  // Antigüedad de la pasada: ICON-EU publica cada 6 h con ~4 h de retraso, así que hasta ~10 h es normal.
+  function showFreshness() {
+    var el = $('freshness');
+    if (manifest.sample) { el.hidden = true; return; }
+    var h = (Date.now() - runTime) / 3600e3;
+    var txt = 'Pasada del ' + utc(runTime).replace(' · ', ' ') + ' · hace ' + (h < 1 ? 'menos de 1' : Math.round(h)) + ' h';
+    el.className = 'fresh' + (h > 26 ? ' old' : h > 13 ? ' warn' : '');
+    el.textContent = (h > 26 ? 'Datos antiguos: ' : '') + txt;
+    el.hidden = false;
+  }
 
   function buildDays() {
     var html = '', last = -1, n = manifest.steps.length - 1;
@@ -177,7 +189,10 @@
     map.setLayoutProperty('base_osm', 'visibility', esri ? 'none' : 'visible');
   }
   function applyBorders() {
-    if (ready && map.getLayer('borders')) map.setLayoutProperty('borders', 'visibility', state.borders ? 'visible' : 'none');
+    if (!ready) return;
+    ['coast', 'borders'].forEach(function (id) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', state.borders ? 'visible' : 'none');
+    });
   }
 
   // ---------- Viento animado ----------
@@ -365,6 +380,11 @@
         layout: { visibility: state.relief ? 'visible' : 'none' },
         paint: { 'hillshade-exaggeration': 0.45, 'hillshade-shadow-color': '#26323f', 'hillshade-highlight-color': '#ffffff',
           'hillshade-accent-color': '#3a4856', 'hillshade-illumination-direction': 315 } });
+      // Costas y fronteras por encima del campo (y del relieve), por debajo de isobaras y etiquetas.
+      map.addSource('coast', { type: 'geojson', data: 'geo/coast.json' });
+      map.addLayer({ id: 'coast', type: 'line', source: 'coast',
+        layout: { visibility: state.borders ? 'visible' : 'none', 'line-join': 'round' },
+        paint: { 'line-color': '#2f3b47', 'line-opacity': 0.7, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.7, 8, 1.4] } });
       map.addSource('borders', { type: 'geojson', data: 'geo/borders.json' });
       map.addLayer({ id: 'borders', type: 'line', source: 'borders',
         layout: { visibility: state.borders ? 'visible' : 'none', 'line-join': 'round' },
