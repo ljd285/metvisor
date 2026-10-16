@@ -81,6 +81,19 @@ class GribTests(unittest.TestCase):
         self.assertEqual(im.getpixel((1, 1))[3], 0)
 
 
+class HideBelowTests(unittest.TestCase):
+    def test_low_values_are_transparent(self):
+        spec = {"min": 0, "max": 10, "colors": ["#000000", "#ffffff"], "hide_below": 1.0}
+        v = np.array([[0.5, 1.0], [5.0, 0.0]])
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "a.png"
+            render.to_png(v, spec, p)
+            with Image.open(p) as im:
+                im = im.convert("RGBA")
+                alphas = [im.getpixel(xy)[3] for xy in ((0, 0), (1, 0), (0, 1), (1, 1))]
+        self.assertEqual(alphas, [0, 255, 255, 0])  # 0.5 y 0.0 ocultos; 1.0 (= umbral) y 5.0 visibles
+
+
 class ValuesTests(unittest.TestCase):
     def test_roundtrip_missing_and_clipping(self):
         a = np.array([[-12.34, 25.0], [np.nan, 99.0]])

@@ -62,10 +62,13 @@ def palette(colors):
 
 
 def to_png(values: np.ndarray, spec: dict, path):
-    """Escribe un PNG paletizado; NaN → transparente."""
+    """Escribe un PNG paletizado; NaN y valores por debajo de spec["hide_below"] → transparente."""
     t = (values - spec["min"]) / (spec["max"] - spec["min"])
     idx = np.clip(np.round(np.nan_to_num(t) * (TRANSPARENT - 1)), 0, TRANSPARENT - 1).astype(np.uint8)
     idx[~np.isfinite(values)] = TRANSPARENT
+    hide = spec.get("hide_below")
+    if hide is not None:
+        idx[values < hide] = TRANSPARENT
     img = Image.fromarray(idx, mode="P")
     img.putpalette(palette(spec["colors"]).astype(np.uint8).flatten().tolist())
     img.save(path, optimize=True, transparency=TRANSPARENT)

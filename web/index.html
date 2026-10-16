@@ -14,9 +14,10 @@
     <nav id="vars"></nav>
     <h3 class="side-h">Capas</h3>
     <label id="isoRow" class="check" hidden><input type="checkbox" id="isoToggle" checked> Isobaras</label>
+    <label class="check"><input type="checkbox" id="reliefToggle" checked> Relieve</label>
     <h3 class="side-h">Región</h3>
     <nav id="regions"></nav>
-    <p class="credit">Datos: Deutscher Wetterdienst (ICON-EU)<br>Mapa: © OpenStreetMap</p>
+    <p class="credit">Datos: Deutscher Wetterdienst (ICON-EU)<br>Mapa: © OpenStreetMap, © CARTO<br>Relieve: Mapzen / AWS Terrain Tiles</p>
   </aside>
 
   <div id="stage">
@@ -24,6 +25,10 @@
     <button id="menuBtn" type="button" aria-label="Variables" aria-controls="sidebar" aria-expanded="false">☰</button>
     <div id="timeChip" class="chip mono">–</div>
     <div id="sampleBadge" class="chip" hidden>Datos de muestra</div>
+    <div id="searchBox" class="panel">
+      <input id="search" type="search" placeholder="Buscar lugar para el meteograma…" autocomplete="off" aria-label="Buscar lugar" aria-controls="results">
+      <ul id="results" role="listbox" hidden></ul>
+    </div>
     <div id="cursor" hidden></div>
     <div id="meteo" class="panel" hidden>
       <div class="mg-head"><strong id="mgTitle">Meteograma</strong><button id="mgClose" type="button" aria-label="Cerrar meteograma">✕</button></div>
@@ -50,6 +55,7 @@
   <script src="js/sample.js"></script>
   <script src="js/valuegrid.js"></script>
   <script src="js/meteogram.js"></script>
+  <script src="js/geocode.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -2,7 +2,7 @@
 // Sin datos reales (manifest de muestra) siguen funcionando regiones, meteograma y URL.
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var state = { v: 0, t: 0, timer: null, c: null, iso: true };
+  var state = { v: 0, t: 0, timer: null, c: null, iso: true, relief: true };
   var manifest, map, source, runTime, ready = false;
   var DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
   var MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -34,6 +34,7 @@
     var c = (p.get('c') || '').split(',').map(Number);
     if (c.length === 3 && c.every(isFinite)) state.c = c;
     if (p.get('iso') === '0') state.iso = false;
+    if (p.get('rel') === '0') state.relief = false;
   }
   function writeHash() {
     var h = '#var=' + manifest.variables[state.v].id + '&t=' + state.t;
@@ -42,6 +43,7 @@
       h += '&c=' + m.lat.toFixed(3) + ',' + m.lng.toFixed(3) + ',' + map.getZoom().toFixed(2);
     }
     if (!state.iso) h += '&iso=0';
+    if (!state.relief) h += '&rel=0';
     history.replaceState(null, '', h);
   }
 
@@ -70,6 +72,8 @@
     $('isoRow').hidden = !manifest.isobars;
     $('isoToggle').checked = state.iso;
     $('isoToggle').addEventListener('change', function () { state.iso = this.checked; applyIso(); writeHash(); });
+    $('reliefToggle').checked = state.relief;
+    $('reliefToggle').addEventListener('change', function () { state.relief = this.checked; applyRelief(); writeHash(); });
   }
   function closeMenu() { document.body.classList.remove('menu-open'); $('menuBtn').setAttribute('aria-expanded', 'false'); }
 
@@ -151,16 +155,24 @@
     get.then(function (g) { if (token === isoToken) map.getSource('isobars').setData(g); }).catch(function () {});
   }
 
+  function applyRelief() {
+    if (ready && map.getLayer('relief')) map.setLayoutProperty('relief', 'visibility', state.relief ? 'visible' : 'none');
+  }
+
   // ---------- Meteograma ----------
   var marker, mgData, mgToken = 0;
   function drawMeteogram() {
     if (mgData) $('mgBody').innerHTML = Meteogram.render(mgData, stepMs(state.t));
   }
-  function openMeteogram(lngLat) {
+  function openMeteogram(lngLat, name) {
     var token = ++mgToken;
-    if (!marker) marker = new maplibregl.Marker({ color: '#ff9f5a' });
+    if (!marker) {
+      marker = new maplibregl.Marker({ color: '#ff9f5a', draggable: true });
+      marker.on('dragend', function () { openMeteogram(marker.getLngLat()); });
+    }
     marker.setLngLat(lngLat).addTo(map);
-    $('mgTitle').textContent = lngLat.lat.toFixed(2) + '° N, ' + lngLat.lng.toFixed(2) + '°';
+    var coords = lngLat.lat.toFixed(2) + '° N, ' + lngLat.lng.toFixed(2) + '°';
+    $('mgTitle').textContent = name ? name + ' · ' + coords : coords;
     $('mgBody').textContent = 'Cargando…';
     mgData = null;
     $('meteo').hidden = false;
@@ -181,6 +193,54 @@
     var t = Meteogram.timeAt(mgData, (e.clientX - r.left) / r.width), best = 0, bd = Infinity;
     manifest.steps.forEach(function (_, i) { var d = Math.abs(stepMs(i) - t); if (d < bd) { bd = d; best = i; } });
     state.t = best; update();
+  }
+
+  // ---------- Buscador ----------
+  var searchTimer, searchToken = 0, found = [], active = -1;
+  function hideResults() { $('results').hidden = true; found = []; active = -1; }
+  function showResults(list) {
+    found = list; active = -1;
+    var ul = $('results');
+    ul.innerHTML = list.length ? list.map(function (r, i) {
+      var l = Geocode.label(r);
+      return '<li role="option" data-i="' + i + '">' + l.name + '<span>' + l.detail + '</span></li>';
+    }).join('') : '<li class="none">Sin resultados</li>';
+    ul.hidden = false;
+  }
+  function markActive() {
+    Array.prototype.forEach.call($('results').querySelectorAll('li[data-i]'), function (li, i) { li.classList.toggle('on', i === active); });
+  }
+  function choose(i) {
+    var r = found[i]; if (!r) return;
+    hideResults(); $('search').value = r.name;
+    map.flyTo({ center: [r.longitude, r.latitude], zoom: Math.max(map.getZoom(), 8), duration: 700 });
+    openMeteogram({ lat: r.latitude, lng: r.longitude }, r.name);
+  }
+  function initSearch() {
+    var input = $('search');
+    input.addEventListener('input', function () {
+      clearTimeout(searchTimer);
+      var q = this.value.trim();
+      if (q.length < 2) { searchToken++; hideResults(); return; }
+      searchTimer = setTimeout(function () {
+        var token = ++searchToken;
+        Geocode.search(q).then(function (list) { if (token === searchToken) showResults(list); })
+          .catch(function () { if (token === searchToken) showResults([]); });
+      }, 300);
+    });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!found.length) return;
+        e.preventDefault();
+        active = (active + (e.key === 'ArrowDown' ? 1 : -1) + found.length) % found.length; markActive();
+      } else if (e.key === 'Enter') { choose(active >= 0 ? active : 0); }
+      else if (e.key === 'Escape') { hideResults(); input.blur(); }
+      e.stopPropagation();
+    });
+    $('results').addEventListener('click', function (e) {
+      var li = e.target.closest('li[data-i]'); if (li) choose(+li.dataset.i);
+    });
+    document.addEventListener('click', function (e) { if (!e.target.closest('#searchBox')) hideResults(); });
   }
 
   // ---------- Actualización ----------
@@ -218,9 +278,17 @@
       container: 'map',
       style: {
         version: 8,
-        sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, maxzoom: 19,
-          attribution: '© OpenStreetMap · Deutscher Wetterdienst · Open-Meteo' } },
-        layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+        sources: {
+          base: { type: 'raster', tileSize: 256, maxzoom: 20,
+            tiles: ['a', 'b', 'c', 'd'].map(function (n) { return 'https://' + n + '.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png'; }),
+            attribution: '© OpenStreetMap © CARTO · Deutscher Wetterdienst · Open-Meteo' },
+          labels: { type: 'raster', tileSize: 256, maxzoom: 20,
+            tiles: ['a', 'b', 'c', 'd'].map(function (n) { return 'https://' + n + '.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png'; }) },
+          dem: { type: 'raster-dem', encoding: 'terrarium', tileSize: 256, maxzoom: 12,
+            tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+            attribution: 'Relieve: Terrain Tiles (Mapzen/AWS)' },
+        },
+        layers: [{ id: 'base', type: 'raster', source: 'base' }],
       },
       maxBounds: [[-20, 28], [15, 52]],
     };
@@ -237,12 +305,18 @@
       map.addSource('field', { type: 'image', url: frame(v, state.t), coordinates: coords() });
       map.addLayer({ id: 'field', type: 'raster', source: 'field', paint: { 'raster-opacity': 0.8, 'raster-fade-duration': 0 } });
       source = map.getSource('field');
+      // Orden (de abajo arriba): mapa base, campo, relieve, isobaras, etiquetas.
+      map.addLayer({ id: 'relief', type: 'hillshade', source: 'dem',
+        layout: { visibility: state.relief ? 'visible' : 'none' },
+        paint: { 'hillshade-exaggeration': 0.45, 'hillshade-shadow-color': '#26323f', 'hillshade-highlight-color': '#ffffff',
+          'hillshade-accent-color': '#3a4856', 'hillshade-illumination-direction': 315 } });
       if (manifest.isobars) {
         map.addSource('isobars', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addLayer({ id: 'isobars', type: 'line', source: 'isobars',
           layout: { 'line-join': 'round' },
           paint: { 'line-color': '#14283a', 'line-opacity': 0.75, 'line-width': ['case', ['get', 'major'], 1.8, 0.8] } });
       }
+      map.addLayer({ id: 'labels', type: 'raster', source: 'labels' });
       ready = true;
       applyIso();
     });
@@ -266,12 +340,14 @@
     $('slider').addEventListener('input', function () { state.t = +this.value; update(); });
     $('play').addEventListener('click', togglePlay);
     $('mgClose').addEventListener('click', closeMeteogram);
+    initSearch();
     $('mgBody').addEventListener('click', onMeteogramClick);
     $('menuBtn').addEventListener('click', function () {
       var open = document.body.classList.toggle('menu-open'); this.setAttribute('aria-expanded', open);
     });
     document.addEventListener('keydown', function (e) {
       if (e.target.tagName === 'INPUT') return;
+      if (e.key === '/') { e.preventDefault(); $('search').focus(); }
       if (e.key === ' ') { e.preventDefault(); togglePlay(); }
       if (e.key === 'ArrowRight') { state.t = Math.min(manifest.steps.length - 1, state.t + 1); update(); }
       if (e.key === 'ArrowLeft') { state.t = Math.max(0, state.t - 1); update(); }

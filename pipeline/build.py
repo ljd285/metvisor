@@ -116,7 +116,8 @@ def build(source, out_dir: Path, steps, workers=6):
             tmp / "values" / f"{spec['id']}.png", optimize=True)
         if spec["kind"] == "pressure":
             pressure = derived
-        manifest_vars.append({k: spec[k] for k in ("id", "group", "label", "unit", "min", "max", "colors", "vmin", "vmax")})
+        manifest_vars.append({k: spec[k] for k in ("id", "group", "label", "unit", "min", "max", "colors", "vmin", "vmax")}
+                             | ({"hide_below": spec["hide_below"]} if "hide_below" in spec else {}))
         print(f"  {spec['id']}: {len(avail)}/{len(steps)} pasos", flush=True)
 
     if not manifest_vars:

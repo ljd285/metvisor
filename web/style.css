@@ -27,6 +27,15 @@ button:focus-visible, input:focus-visible { outline: 2px solid #7cc4e6; outline-
 .check { display: flex; gap: 8px; align-items: center; padding: 4px 8px; cursor: pointer; }
 .check input { accent-color: #4fb3dc; }
 
+#searchBox { left: 50%; top: 12px; transform: translateX(-50%); width: min(320px, calc(100% - 340px)); background: none; }
+#search { width: 100%; padding: 8px 12px; border: 0; border-radius: 6px; background: var(--ui); color: var(--ui-fg); font: inherit; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+#search::placeholder { color: var(--muted); }
+#results { list-style: none; margin: 4px 0 0; padding: 4px; background: var(--ui); border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.4); max-height: 50vh; overflow-y: auto; }
+#results li { padding: 6px 8px; border-radius: 4px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
+#results li:hover, #results li.on { background: var(--ui-soft); }
+#results li span { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#results li.none { cursor: default; color: var(--muted); }
+
 #cursor { position: absolute; z-index: 3; pointer-events: none; background: var(--ui); color: var(--ui-fg); padding: 3px 8px; border-radius: 5px; font-family: var(--mono); font-size: 12px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.4); transform: translate(12px, -28px); }
 
 #meteo { left: 12px; bottom: 96px; width: 392px; max-width: calc(100% - 24px); padding: 8px 10px; display: grid; gap: 4px; }
@@ -71,7 +80,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid #7cc4e6; outline-
   body.menu-open #sidebar { transform: none; }
   #menuBtn { display: block; position: absolute; z-index: 3; left: 12px; top: 12px; width: 36px; height: 36px; border: 0; border-radius: 6px; background: var(--ui); color: var(--ui-fg); font-size: 18px; }
   #timeChip { left: 56px; }
-  #sampleBadge { left: 56px; top: 48px; }
+  #sampleBadge { left: 56px; top: 100px; }
+  #searchBox { left: 12px; right: 12px; top: 56px; width: auto; transform: none; }
   #legend { width: 130px; }
   #days { margin: 0 70px 0 40px; }
   #meteo { bottom: 100px; }

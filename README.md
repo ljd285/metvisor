@@ -9,7 +9,10 @@ publican como imágenes en GitHub Pages. Plan completo: [`docs/PLAN.md`](docs/PL
 - Fase 2: pipeline `pipeline/` que genera imágenes ICON-EU reales; el workflow las construye en cada despliegue y cada 6 h.
   Sin `web/data/`, la web muestra datos de muestra sintéticos (etiqueta naranja).
 - Fase 3: valor bajo el cursor, meteograma al pulsar en el mapa (Open-Meteo, ICON-EU), isobaras, regiones y URL compartible
-  (`#var=…&t=…&c=lat,lon,zoom`). Atajos: espacio = play, ← → = cambiar hora, Esc = cerrar meteograma.
+  (`#var=…&t=…&c=lat,lon,zoom`). Atajos: espacio = play, ← → = cambiar hora, `/` = buscar lugar, Esc = cerrar meteograma.
+- Fase 3b: mapa base CARTO con relieve (sombreado de Terrain Tiles de AWS) y etiquetas encima del campo; valores bajos
+  transparentes (`hide_below` en `pipeline/config.py`); buscador de lugares (Open-Meteo Geocoding) y marcador arrastrable
+  para el meteograma.
 
 ## Ver la web en local
 Abre un servidor estático en `web/` (el mapa carga recursos externos, así que no basta `file://` en todos los navegadores):
@@ -32,4 +35,5 @@ docs/       plan de trabajo
 .github/    workflows
 ```
 
-Atribución: Deutscher Wetterdienst (ICON-EU), © OpenStreetMap.
+Atribución: Deutscher Wetterdienst (ICON-EU), Open-Meteo, © OpenStreetMap, © CARTO, Mapzen/AWS Terrain Tiles.
+Nota: los mapas base de CARTO son gratuitos para uso no comercial; si el proyecto pasa a uso comercial habrá que cambiar de proveedor.
