@@ -8,6 +8,8 @@ publican como imágenes en GitHub Pages. Plan completo: [`docs/PLAN.md`](docs/PL
 - Fase 0 y 1: mapa, panel de variables, barra de tiempo y leyenda (hecho).
 - Fase 2: pipeline `pipeline/` que genera imágenes ICON-EU reales; el workflow las construye en cada despliegue y cada 6 h.
   Sin `web/data/`, la web muestra datos de muestra sintéticos (etiqueta naranja).
+- Fase 3: valor bajo el cursor, meteograma al pulsar en el mapa (Open-Meteo, ICON-EU), isobaras, regiones y URL compartible
+  (`#var=…&t=…&c=lat,lon,zoom`). Atajos: espacio = play, ← → = cambiar hora, Esc = cerrar meteograma.
 
 ## Ver la web en local
 Abre un servidor estático en `web/` (el mapa carga recursos externos, así que no basta `file://` en todos los navegadores):

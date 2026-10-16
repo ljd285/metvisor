@@ -1,29 +1,51 @@
-// Metvisor — Fase 1: interfaz con panel lateral, barra de tiempo y leyenda.
-// Los fotogramas vienen de Sample (campos sintéticos) hasta que exista el pipeline (Fase 2).
+// Metvisor — Fase 3: valor bajo el cursor, meteograma al pulsar, isobaras, regiones y URL compartible.
+// Sin datos reales (manifest de muestra) siguen funcionando regiones, meteograma y URL.
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var state = { v: 0, t: 0, timer: null };
-  var manifest, map, source, runTime;
+  var state = { v: 0, t: 0, timer: null, c: null, iso: true };
+  var manifest, map, source, runTime, ready = false;
+  var DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+  var MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
+  // [oeste, sur, este, norte]
+  var REGIONS = [
+    { id: 'iberia', label: 'Península', b: [-10.5, 35.0, 4.8, 44.5] },
+    { id: 'noroeste', label: 'Galicia y Cantábrico', b: [-9.6, 41.4, -1.0, 44.3] },
+    { id: 'noreste', label: 'Pirineos y Cataluña', b: [-2.0, 40.3, 4.4, 43.6] },
+    { id: 'sur', label: 'Andalucía', b: [-7.7, 35.8, -0.8, 38.9] },
+    { id: 'baleares', label: 'Baleares', b: [1.0, 38.4, 4.6, 40.3] },
+  ];
+
+  function p2(n) { return (n < 10 ? '0' : '') + n; }
   function utc(ms) {
     var d = new Date(ms);
-    var dias = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
-    var meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-    var p = function (n) { return (n < 10 ? '0' : '') + n; };
-    return dias[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + meses[d.getUTCMonth()] + ' · ' + p(d.getUTCHours()) + ':00 UTC';
+    return DAYS[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()] + ' · ' + p2(d.getUTCHours()) + ':00 UTC';
   }
+  function runLabel() { return p2(new Date(runTime).getUTCHours()) + ' UTC'; }
+  function stepMs(i) { return runTime + manifest.steps[i] * 3600e3; }
 
+  // ---------- URL: #var=…&t=…&c=lat,lon,zoom ----------
   function readHash() {
     var p = new URLSearchParams(location.hash.slice(1));
     var vi = manifest.variables.findIndex(function (x) { return x.id === p.get('var'); });
     if (vi >= 0) state.v = vi;
     var t = parseInt(p.get('t'), 10);
     if (t >= 0 && t < manifest.steps.length) state.t = t;
+    var c = (p.get('c') || '').split(',').map(Number);
+    if (c.length === 3 && c.every(isFinite)) state.c = c;
+    if (p.get('iso') === '0') state.iso = false;
   }
   function writeHash() {
-    history.replaceState(null, '', '#var=' + manifest.variables[state.v].id + '&t=' + state.t);
+    var h = '#var=' + manifest.variables[state.v].id + '&t=' + state.t;
+    if (map) {
+      var m = map.getCenter();
+      h += '&c=' + m.lat.toFixed(3) + ',' + m.lng.toFixed(3) + ',' + map.getZoom().toFixed(2);
+    }
+    if (!state.iso) h += '&iso=0';
+    history.replaceState(null, '', h);
   }
 
+  // ---------- Panel lateral ----------
   function buildSidebar() {
     var html = '', group = '';
     manifest.variables.forEach(function (v, i) {
@@ -33,11 +55,23 @@
     $('vars').innerHTML = html;
     $('vars').addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b) return;
-      state.v = +b.dataset.i; document.body.classList.remove('menu-open'); $('menuBtn').setAttribute('aria-expanded', 'false'); update();
+      state.v = +b.dataset.i; closeMenu(); update();
+    });
+    $('regions').innerHTML = REGIONS.map(function (r) {
+      return '<button type="button" data-r="' + r.id + '">' + r.label + '</button>';
+    }).join('');
+    $('regions').addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      var r = REGIONS.find(function (x) { return x.id === b.dataset.r; });
+      map.fitBounds([[r.b[0], r.b[1]], [r.b[2], r.b[3]]], { padding: 24, duration: 600 });
+      closeMenu();
     });
     $('modelPill').textContent = manifest.model + ' · ' + runLabel();
+    $('isoRow').hidden = !manifest.isobars;
+    $('isoToggle').checked = state.iso;
+    $('isoToggle').addEventListener('change', function () { state.iso = this.checked; applyIso(); writeHash(); });
   }
-  function runLabel() { return String(new Date(runTime).getUTCHours()).padStart(2, '0') + ' UTC'; }
+  function closeMenu() { document.body.classList.remove('menu-open'); $('menuBtn').setAttribute('aria-expanded', 'false'); }
 
   function buildDays() {
     var html = '', last = -1, n = manifest.steps.length - 1;
@@ -45,18 +79,17 @@
       var d = new Date(runTime + h * 3600e3), day = d.getUTCDate();
       if (day !== last) {
         last = day;
-        var names = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
-        html += '<span style="left:' + (i / n * 100) + '%">' + names[d.getUTCDay()] + ' ' + day + '</span>';
+        html += '<span style="left:' + (i / n * 100) + '%">' + DAYS[d.getUTCDay()] + ' ' + day + '</span>';
       }
     });
     $('days').innerHTML = html;
   }
 
+  // ---------- Fotogramas ----------
   var frames = {};
   function frame(v, i) {
     if (!manifest.sample) {
-      var s = String(manifest.steps[i]).padStart(3, '0');
-      return 'data/frames/' + v.id + '/' + s + '.png';
+      return 'data/frames/' + v.id + '/' + String(manifest.steps[i]).padStart(3, '0') + '.png';
     }
     var k = v.id + ':' + i;
     return frames[k] || (frames[k] = Sample.render(v, manifest.steps[i]));
@@ -68,58 +101,154 @@
       if (i < manifest.steps.length) new Image().src = frame(v, i);
     }
   }
-
-  function update() {
-    var v = manifest.variables[state.v], h = manifest.steps[state.t];
-    Array.prototype.forEach.call($('vars').querySelectorAll('button'), function (b) {
-      b.classList.toggle('on', +b.dataset.i === state.v);
-    });
-    $('slider').value = state.t;
-    $('lead').textContent = '+' + h + ' h';
-    $('timeChip').textContent = utc(runTime + h * 3600e3);
-    $('legendTitle').textContent = v.label + ' (' + v.unit + ')';
-    $('legendBar').style.background = 'linear-gradient(90deg,' + v.colors.join(',') + ')';
-    var mid = Math.round((v.min + v.max) / 2);
-    $('legendTicks').innerHTML = '<span>' + v.min + '</span><span>' + mid + '</span><span>' + v.max + '</span>';
-    if (source) source.updateImage({ url: frame(v, state.t), coordinates: coords() });
-    preload(v);
-    writeHash();
-  }
-
   function coords() {
     var b = manifest.bounds;
     return [[b.west, b.north], [b.east, b.north], [b.east, b.south], [b.west, b.south]];
   }
 
+  // ---------- Valor bajo el cursor ----------
+  var valueData = {};   // variable → {px, w, h}
+  var loading = {};
+  function ensureValues(v) {
+    if (!manifest.grid || valueData[v.id] || loading[v.id]) return;
+    loading[v.id] = true;
+    ValueGrid.load('data/values/' + v.id + '.png').then(function (d) { valueData[v.id] = d; })
+      .catch(function () { /* sin rejilla: no se muestra valor */ })
+      .then(function () { loading[v.id] = false; });
+  }
+  function valueAt(lngLat) {
+    var v = manifest.variables[state.v], d = valueData[v.id];
+    if (!d) return null;
+    return ValueGrid.sample(d.px, d.w, manifest.grid, v, state.t, lngLat.lat, lngLat.lng);
+  }
+  function fmt(x, unit) {
+    var dec = unit === 'hPa' || unit === 'km/h' || unit === '°C' || unit === 'mm/h' ? 1 : 0;
+    return x.toFixed(dec) + ' ' + unit;
+  }
+  var raf = 0;
+  function onMove(e) {
+    if (raf) return;
+    raf = requestAnimationFrame(function () {
+      raf = 0;
+      var el = $('cursor');
+      var val = manifest.grid ? valueAt(e.lngLat) : null;
+      if (val == null) { el.hidden = true; return; }
+      el.textContent = fmt(val, manifest.variables[state.v].unit);
+      el.style.left = e.point.x + 'px'; el.style.top = e.point.y + 'px';
+      el.hidden = false;
+    });
+  }
+
+  // ---------- Isobaras ----------
+  var isoCache = {}, isoToken = 0;
+  function applyIso() {
+    if (!ready || !map.getLayer('isobars')) return;
+    map.setLayoutProperty('isobars', 'visibility', state.iso ? 'visible' : 'none');
+    if (!state.iso) return;
+    var i = state.t, token = ++isoToken, name = String(manifest.steps[i]).padStart(3, '0');
+    var get = isoCache[name] ? Promise.resolve(isoCache[name]) :
+      fetch('data/isobars/' + name + '.json').then(function (r) { return r.json(); }).then(function (g) { return (isoCache[name] = g); });
+    get.then(function (g) { if (token === isoToken) map.getSource('isobars').setData(g); }).catch(function () {});
+  }
+
+  // ---------- Meteograma ----------
+  var marker, mgData, mgToken = 0;
+  function drawMeteogram() {
+    if (mgData) $('mgBody').innerHTML = Meteogram.render(mgData, stepMs(state.t));
+  }
+  function openMeteogram(lngLat) {
+    var token = ++mgToken;
+    if (!marker) marker = new maplibregl.Marker({ color: '#ff9f5a' });
+    marker.setLngLat(lngLat).addTo(map);
+    $('mgTitle').textContent = lngLat.lat.toFixed(2) + '° N, ' + lngLat.lng.toFixed(2) + '°';
+    $('mgBody').textContent = 'Cargando…';
+    mgData = null;
+    $('meteo').hidden = false;
+    Meteogram.fetchPoint(lngLat.lat, lngLat.lng).then(function (d) {
+      if (token !== mgToken) return;
+      mgData = d; drawMeteogram();
+    }).catch(function (err) {
+      if (token === mgToken) $('mgBody').textContent = 'No se pudo cargar el meteograma (' + err.message + ').';
+    });
+  }
+  function closeMeteogram() {
+    mgToken++; mgData = null; $('meteo').hidden = true;
+    if (marker) marker.remove();
+  }
+  function onMeteogramClick(e) {
+    var svg = e.target.closest('svg'); if (!svg || !mgData) return;
+    var r = svg.getBoundingClientRect();
+    var t = Meteogram.timeAt(mgData, (e.clientX - r.left) / r.width), best = 0, bd = Infinity;
+    manifest.steps.forEach(function (_, i) { var d = Math.abs(stepMs(i) - t); if (d < bd) { bd = d; best = i; } });
+    state.t = best; update();
+  }
+
+  // ---------- Actualización ----------
+  function update() {
+    var v = manifest.variables[state.v];
+    Array.prototype.forEach.call($('vars').querySelectorAll('button'), function (b) {
+      b.classList.toggle('on', +b.dataset.i === state.v);
+    });
+    $('slider').value = state.t;
+    $('lead').textContent = '+' + manifest.steps[state.t] + ' h';
+    $('timeChip').textContent = utc(stepMs(state.t));
+    $('legendTitle').textContent = v.label + ' (' + v.unit + ')';
+    $('legendBar').style.background = 'linear-gradient(90deg,' + v.colors.join(',') + ')';
+    var mid = Math.round((v.min + v.max) / 2);
+    $('legendTicks').innerHTML = '<span>' + v.min + '</span><span>' + mid + '</span><span>' + v.max + '</span>';
+    if (source) source.updateImage({ url: frame(v, state.t), coordinates: coords() });
+    preload(v); ensureValues(v); applyIso(); drawMeteogram();
+    writeHash();
+  }
+
   function togglePlay() {
-    if (state.timer) { clearInterval(state.timer); state.timer = null; $('play').textContent = '▶'; $('play').setAttribute('aria-label', 'Reproducir'); return; }
+    if (state.timer) {
+      clearInterval(state.timer); state.timer = null;
+      $('play').textContent = '▶'; $('play').setAttribute('aria-label', 'Reproducir');
+      return;
+    }
     $('play').textContent = '❚❚'; $('play').setAttribute('aria-label', 'Pausar');
     state.timer = setInterval(function () { state.t = (state.t + 1) % manifest.steps.length; update(); }, 500);
   }
 
+  // ---------- Mapa ----------
   function initMap() {
     var b = manifest.bounds;
-    map = new maplibregl.Map({
+    var opts = {
       container: 'map',
       style: {
         version: 8,
         sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, maxzoom: 19,
-          attribution: '© OpenStreetMap · Deutscher Wetterdienst' } },
+          attribution: '© OpenStreetMap · Deutscher Wetterdienst · Open-Meteo' } },
         layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
       },
-      bounds: [b.west, b.south, b.east, b.north],
       maxBounds: [[-20, 28], [15, 52]],
-    });
+    };
+    if (state.c) { opts.center = [state.c[1], state.c[0]]; opts.zoom = state.c[2]; }
+    else opts.bounds = [REGIONS[0].b[0], REGIONS[0].b[1], REGIONS[0].b[2], REGIONS[0].b[3]];
+    map = new maplibregl.Map(opts);
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.on('moveend', writeHash);
+    map.on('mousemove', onMove);
+    map.on('mouseout', function () { $('cursor').hidden = true; });
+    map.on('click', function (e) { openMeteogram(e.lngLat); });
     map.on('load', function () {
       var v = manifest.variables[state.v];
       map.addSource('field', { type: 'image', url: frame(v, state.t), coordinates: coords() });
       map.addLayer({ id: 'field', type: 'raster', source: 'field', paint: { 'raster-opacity': 0.8, 'raster-fade-duration': 0 } });
       source = map.getSource('field');
+      if (manifest.isobars) {
+        map.addSource('isobars', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({ id: 'isobars', type: 'line', source: 'isobars',
+          layout: { 'line-join': 'round' },
+          paint: { 'line-color': '#14283a', 'line-opacity': 0.75, 'line-width': ['case', ['get', 'major'], 1.8, 0.8] } });
+      }
+      ready = true;
+      applyIso();
     });
   }
 
-  // Datos reales (generados por el pipeline); si no existen, manifiesto de muestra.
+  // ---------- Arranque ----------
   function loadManifest() {
     return fetch('data/manifest.json').then(function (r) {
       if (!r.ok) throw new Error('sin datos reales');
@@ -129,7 +258,6 @@
 
   loadManifest().then(function (m) {
     manifest = m;
-    // Pasada real, o de muestra: última hora múltiplo de 6 en UTC.
     runTime = m.runTime ? Date.parse(m.runTime) : Math.floor(Date.now() / 21600e3) * 21600e3;
     readHash();
     $('sampleBadge').hidden = !m.sample;
@@ -137,6 +265,8 @@
     buildSidebar(); buildDays(); initMap(); update();
     $('slider').addEventListener('input', function () { state.t = +this.value; update(); });
     $('play').addEventListener('click', togglePlay);
+    $('mgClose').addEventListener('click', closeMeteogram);
+    $('mgBody').addEventListener('click', onMeteogramClick);
     $('menuBtn').addEventListener('click', function () {
       var open = document.body.classList.toggle('menu-open'); this.setAttribute('aria-expanded', open);
     });
@@ -145,6 +275,9 @@
       if (e.key === ' ') { e.preventDefault(); togglePlay(); }
       if (e.key === 'ArrowRight') { state.t = Math.min(manifest.steps.length - 1, state.t + 1); update(); }
       if (e.key === 'ArrowLeft') { state.t = Math.max(0, state.t - 1); update(); }
+      if (e.key === 'Escape') closeMeteogram();
     });
-  }).catch(function (e) { document.body.insertAdjacentHTML('beforeend', '<p style="position:absolute;top:50%;left:20px;color:#b00">No se pudo cargar manifest.json: ' + e.message + '</p>'); });
+  }).catch(function (e) {
+    document.body.insertAdjacentHTML('beforeend', '<p style="position:absolute;top:50%;left:20px;color:#b00">No se pudo cargar el visor: ' + e.message + '</p>');
+  });
 })();

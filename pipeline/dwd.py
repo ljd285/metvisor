@@ -60,10 +60,10 @@ def candidate_runs(now=None, count=4):
     return [(t - timedelta(hours=6 * k)).strftime("%Y%m%d%H") for k in range(count)]
 
 
-def latest_complete_run(exists=None):
+def latest_complete_run(exists=None, now=None):
     """Primera pasada cuyo último paso (+120 h) ya está publicado."""
     exists = exists or _head_ok
-    for run in candidate_runs():
+    for run in candidate_runs(now):
         if exists(url(run, config.STEPS[-1], "PMSL")):
             return run
     raise RuntimeError("No hay ninguna pasada ICON-EU completa disponible")

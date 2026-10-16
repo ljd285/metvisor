@@ -9,7 +9,7 @@ import numpy as np
 import eccodes
 from PIL import Image
 
-from pipeline import build, dwd, grib, render
+from pipeline import build, contours, dwd, grib, render, values
 
 RUN = "2026101506"
 # Rejilla de prueba más grande que el dominio, como ICON-EU (0,0625°), pero con paso 0,25° para ir rápido.
@@ -81,6 +81,48 @@ class GribTests(unittest.TestCase):
         self.assertEqual(im.getpixel((1, 1))[3], 0)
 
 
+class ValuesTests(unittest.TestCase):
+    def test_roundtrip_missing_and_clipping(self):
+        a = np.array([[-12.34, 25.0], [np.nan, 99.0]])
+        img = values.encode_stack([a, None], 2, 2, -40, 55)
+        self.assertEqual(img.size, (2, 4))  # 2 pasos apilados
+        px = np.asarray(img)
+        v = lambda y, x: values.decode_cell(px[y, x], -40, 55)
+        self.assertAlmostEqual(v(0, 0), -12.34, delta=0.002)
+        self.assertAlmostEqual(v(0, 1), 25.0, delta=0.002)
+        self.assertIsNone(v(1, 0))           # NaN
+        self.assertAlmostEqual(v(1, 1), 55.0, delta=0.002)  # recortado al rango
+        self.assertIsNone(v(2, 0))           # paso ausente
+
+
+class ContourTests(unittest.TestCase):
+    def test_circle_level_lies_on_circle(self):
+        n = 61
+        yy, xx = np.mgrid[0:n, 0:n]
+        z = np.hypot(xx - 30, yy - 30)  # distancia al centro
+        segs = contours.segments(z, 10.0)
+        self.assertGreater(len(segs), 40)
+        for (x0, y0), (x1, y1) in segs:
+            self.assertAlmostEqual(np.hypot(x0 - 30, y0 - 30), 10.0, delta=0.15)
+            self.assertAlmostEqual(np.hypot(x1 - 30, y1 - 30), 10.0, delta=0.15)
+
+    def test_nan_cells_are_skipped_and_saddle_gives_two_segments(self):
+        z = np.array([[0.0, 1.0], [1.0, 0.0]])  # silla
+        self.assertEqual(len(contours.segments(z, 0.5)), 2)
+        z[0, 0] = np.nan
+        self.assertEqual(contours.segments(z, 0.5), [])
+
+    def test_isobars_geojson(self):
+        f = grib.Field(1000 + np.add.outer(np.arange(30) * 0.5, np.arange(40) * 0.3), 44.0, -10.0, 0.125, 0.125)
+        gj = contours.isobars(f, interval=4, stride=2)
+        levels = [ft["properties"]["p"] for ft in gj["features"]]
+        self.assertEqual(levels, sorted(levels))
+        self.assertTrue(all(p % 4 == 0 for p in levels))
+        self.assertTrue(any(ft["properties"]["major"] for ft in gj["features"]))
+        lon, lat = gj["features"][0]["geometry"]["coordinates"][0][0]
+        self.assertTrue(-10.5 < lon < -4 and 38 < lat < 44.5)
+
+
 class BuildTests(unittest.TestCase):
     def test_full_build_from_local_files(self):
         steps = [0, 1, 2]
@@ -114,6 +156,15 @@ class BuildTests(unittest.TestCase):
                 for s in steps:  # también rachas en +0 h (copia del primer paso disponible)
                     with Image.open(out / "frames" / v["id"] / f"{s:03d}.png") as im:
                         self.assertEqual(im.size, (w, h))
+            self.assertEqual(man["grid"]["nx"] > 2 and man["grid"]["ny"] > 2, True)
+            self.assertEqual(man["isobars"]["interval"], 4)
+            for st in steps:
+                self.assertTrue((out / "isobars" / f"{st:03d}.json").exists())
+            with Image.open(out / "values" / "temperature_2m.png") as vi:
+                self.assertEqual(vi.size, (man["grid"]["nx"], man["grid"]["ny"] * len(steps)))
+                cell = vi.getpixel((man["grid"]["nx"] // 2, man["grid"]["ny"] // 2))  # paso 0
+            t = values.decode_cell(cell, -40, 55)
+            self.assertTrue(10 < t < 30, t)
             # Viento 3-4-5 → 5 m/s = 18 km/h; precipitación 2 mm/h.
             def mid_value(var, s):
                 spec = next(x for x in man["variables"] if x["id"] == var)
@@ -137,7 +188,7 @@ class DwdTests(unittest.TestCase):
         runs = dwd.candidate_runs(datetime(2026, 10, 15, 16, 20, tzinfo=timezone.utc), 3)
         self.assertEqual(runs, ["2026101512", "2026101506", "2026101500"])
         # Solo la pasada 06 está completa
-        self.assertEqual(dwd.latest_complete_run(lambda u: "_2026101506_" in u), "2026101506")
+        self.assertEqual(dwd.latest_complete_run(lambda u: "_2026101506_" in u, datetime(2026, 10, 15, 16, 20, tzinfo=timezone.utc)), "2026101506")
 
 
 if __name__ == "__main__":

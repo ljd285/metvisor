@@ -12,6 +12,10 @@
     <div class="brand">Metvisor</div>
     <div id="modelPill" class="pill">–</div>
     <nav id="vars"></nav>
+    <h3 class="side-h">Capas</h3>
+    <label id="isoRow" class="check" hidden><input type="checkbox" id="isoToggle" checked> Isobaras</label>
+    <h3 class="side-h">Región</h3>
+    <nav id="regions"></nav>
     <p class="credit">Datos: Deutscher Wetterdienst (ICON-EU)<br>Mapa: © OpenStreetMap</p>
   </aside>
 
@@ -20,6 +24,13 @@
     <button id="menuBtn" type="button" aria-label="Variables" aria-controls="sidebar" aria-expanded="false">☰</button>
     <div id="timeChip" class="chip mono">–</div>
     <div id="sampleBadge" class="chip" hidden>Datos de muestra</div>
+    <div id="cursor" hidden></div>
+    <div id="meteo" class="panel" hidden>
+      <div class="mg-head"><strong id="mgTitle">Meteograma</strong><button id="mgClose" type="button" aria-label="Cerrar meteograma">✕</button></div>
+      <div id="mgBody"></div>
+      <div id="mgLegend"><span class="k-temp">Temperatura</span><span class="k-rain">Precipitación</span><span class="k-wind">Viento</span><span class="k-gust">Rachas</span></div>
+      <small id="mgNote">Open-Meteo · ICON-EU. Pulsa en el gráfico para saltar a esa hora.</small>
+    </div>
     <div id="legend" class="panel">
       <div id="legendTitle" class="mono"></div>
       <div id="legendBar"></div>
@@ -37,6 +48,8 @@
 
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="js/sample.js"></script>
+  <script src="js/valuegrid.js"></script>
+  <script src="js/meteogram.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

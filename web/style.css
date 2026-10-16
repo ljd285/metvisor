@@ -11,10 +11,10 @@ body { display: grid; grid-template-columns: 200px 1fr; overflow: hidden; }
 #sidebar { background: var(--ui); color: var(--ui-fg); padding: 12px; overflow-y: auto; z-index: 5; display: flex; flex-direction: column; gap: 6px; }
 .brand { font-size: 16px; font-weight: 600; }
 .pill { display: inline-block; align-self: flex-start; padding: 3px 10px; border-radius: 99px; background: var(--ui-soft); font-size: 12px; }
-#vars h3 { margin: 14px 0 4px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
-#vars button { display: block; width: 100%; text-align: left; padding: 6px 8px; border: 0; border-radius: 5px; background: none; color: inherit; font: inherit; cursor: pointer; }
-#vars button:hover { background: var(--ui-soft); }
-#vars button.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+#vars h3, .side-h { margin: 14px 0 4px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+#vars button, #regions button { display: block; width: 100%; text-align: left; padding: 6px 8px; border: 0; border-radius: 5px; background: none; color: inherit; font: inherit; cursor: pointer; }
+#vars button:hover, #regions button:hover { background: var(--ui-soft); }
+#vars button.on, #regions button.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
 button:focus-visible, input:focus-visible { outline: 2px solid #7cc4e6; outline-offset: 2px; }
 .credit { margin-top: auto; font-size: 11px; color: var(--muted); }
 
@@ -23,6 +23,32 @@ button:focus-visible, input:focus-visible { outline: 2px solid #7cc4e6; outline-
 .chip, .panel { position: absolute; background: var(--ui); color: var(--ui-fg); border-radius: 6px; z-index: 2; }
 .chip { padding: 5px 10px; }
 #timeChip { left: 12px; top: 12px; }
+.side-h { margin: 14px 0 4px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.check { display: flex; gap: 8px; align-items: center; padding: 4px 8px; cursor: pointer; }
+.check input { accent-color: #4fb3dc; }
+
+#cursor { position: absolute; z-index: 3; pointer-events: none; background: var(--ui); color: var(--ui-fg); padding: 3px 8px; border-radius: 5px; font-family: var(--mono); font-size: 12px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.4); transform: translate(12px, -28px); }
+
+#meteo { left: 12px; bottom: 96px; width: 392px; max-width: calc(100% - 24px); padding: 8px 10px; display: grid; gap: 4px; }
+.mg-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+#mgClose { border: 0; background: var(--ui-soft); color: inherit; width: 24px; height: 24px; border-radius: 4px; cursor: pointer; }
+#mgBody svg { width: 100%; height: auto; display: block; cursor: crosshair; }
+#mgBody .mg-txt { font: 9px var(--mono); fill: var(--muted); }
+#mgBody .mg-unit { font: 9px var(--mono); fill: var(--ui-fg); opacity: .8; }
+#mgBody .mg-frame { fill: none; stroke: var(--ui-line); }
+#mgBody .mg-day { stroke: var(--ui-line); stroke-dasharray: 2 3; }
+#mgBody .mg-zero { stroke: #7cc4e6; stroke-width: .7; stroke-dasharray: 3 3; }
+#mgBody .mg-now { stroke: #fff; stroke-width: 1.2; }
+#mgBody .mg-temp { fill: none; stroke: #ff9f5a; stroke-width: 1.8; }
+#mgBody .mg-rain { fill: #6fb7e9; }
+#mgBody .mg-wind { fill: none; stroke: #a1dab4; stroke-width: 1.6; }
+#mgBody .mg-gust { fill: none; stroke: #fed976; stroke-width: 1; stroke-dasharray: 3 2; }
+#mgLegend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; }
+#mgLegend span::before { content: ''; display: inline-block; width: 10px; height: 3px; margin-right: 5px; vertical-align: middle; }
+.k-temp::before { background: #ff9f5a; } .k-rain::before { background: #6fb7e9; height: 8px !important; }
+.k-wind::before { background: #a1dab4; } .k-gust::before { background: #fed976; }
+#mgNote { color: var(--muted); font-size: 10px; }
+.maplibregl-ctrl-top-right { margin-right: 0; }
 #sampleBadge { left: 12px; top: 48px; background: #b45309; font-size: 12px; }
 #menuBtn { display: none; }
 
@@ -48,5 +74,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid #7cc4e6; outline-
   #sampleBadge { left: 56px; top: 48px; }
   #legend { width: 130px; }
   #days { margin: 0 70px 0 40px; }
+  #meteo { bottom: 100px; }
+  #cursor { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { #sidebar { transition: none; } }

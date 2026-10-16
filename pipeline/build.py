@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import config, dwd, grib, render
+from . import config, contours, dwd, grib, render, values
 
 
 def load_param(source, param, steps, workers):
@@ -85,7 +85,8 @@ def build(source, out_dir: Path, steps, workers=6):
         print(f"Descargando {p} ({len(steps)} pasos)…", flush=True)
         fields[p] = load_param(source, p, steps, workers)
 
-    manifest_vars, image_bounds, size = [], None, None
+    manifest_vars, image_bounds, size, grid, pressure = [], None, None, None, None
+    (tmp / "values").mkdir()
     for spec in config.VARIABLES:
         derived = derive(spec, fields, steps)
         avail = [s for s in steps if derived[s] is not None]
@@ -94,19 +95,40 @@ def build(source, out_dir: Path, steps, workers=6):
             continue
         vdir = tmp / "frames" / spec["id"]
         vdir.mkdir()
+        value_frames = []
         for s in steps:
-            # Pasos ausentes al inicio (p. ej. rachas en +0 h): se usa el primer paso disponible.
-            f = derived[s] or derived[avail[0]]
-            if derived[s] is None and s > avail[0]:
+            f = derived[s]
+            if f is None and s < avail[0]:
+                # Pasos ausentes al inicio (p. ej. rachas en +0 h): se usa el primer paso disponible.
+                f = derived[avail[0]]
+            if f is None:
+                value_frames.append(None)
                 continue
             arr, image_bounds = render.to_mercator(f, config.SCALE)
             size = arr.shape
             render.to_png(arr, spec, vdir / f"{s:03d}.png")
-        manifest_vars.append({k: spec[k] for k in ("id", "group", "label", "unit", "min", "max", "colors")})
+            value_frames.append(f.data)
+            if grid is None:
+                ny, nx = f.data.shape
+                grid = {"nx": nx, "ny": ny, "lat0": f.lat0, "lon0": f.lon0, "dlat": f.dlat, "dlon": f.dlon}
+        ny, nx = grid["ny"], grid["nx"]
+        values.encode_stack(value_frames, ny, nx, spec["vmin"], spec["vmax"]).save(
+            tmp / "values" / f"{spec['id']}.png", optimize=True)
+        if spec["kind"] == "pressure":
+            pressure = derived
+        manifest_vars.append({k: spec[k] for k in ("id", "group", "label", "unit", "min", "max", "colors", "vmin", "vmax")})
         print(f"  {spec['id']}: {len(avail)}/{len(steps)} pasos", flush=True)
 
     if not manifest_vars:
         raise RuntimeError("No se generó ninguna variable")
+    isobars = None
+    if pressure:
+        (tmp / "isobars").mkdir()
+        for s in steps:
+            if pressure.get(s) is not None:
+                gj = contours.isobars(pressure[s], config.ISOBAR_INTERVAL, config.ISOBAR_STRIDE)
+                (tmp / "isobars" / f"{s:03d}.json").write_text(json.dumps(gj, separators=(",", ":")))
+        isobars = {"interval": config.ISOBAR_INTERVAL}
     run = source.run
     manifest = {
         "sample": False,
@@ -117,6 +139,8 @@ def build(source, out_dir: Path, steps, workers=6):
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "bounds": image_bounds,
         "imageSize": {"width": size[1], "height": size[0]},
+        "grid": grid,
+        "isobars": isobars,
         "steps": steps,
         "variables": manifest_vars,
     }
