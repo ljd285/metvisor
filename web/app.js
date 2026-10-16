@@ -2,7 +2,7 @@
 // Sin datos reales (manifest de muestra) siguen funcionando regiones, meteograma y URL.
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var state = { v: 0, t: 0, timer: null, c: null, iso: true, relief: true };
+  var state = { v: 0, t: 0, timer: null, c: null, iso: true, relief: true, bg: 'esri' };
   var manifest, map, source, runTime, ready = false;
   var DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
   var MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -35,6 +35,7 @@
     if (c.length === 3 && c.every(isFinite)) state.c = c;
     if (p.get('iso') === '0') state.iso = false;
     if (p.get('rel') === '0') state.relief = false;
+    if (p.get('bg') === 'osm') state.bg = 'osm';
   }
   function writeHash() {
     var h = '#var=' + manifest.variables[state.v].id + '&t=' + state.t;
@@ -44,6 +45,7 @@
     }
     if (!state.iso) h += '&iso=0';
     if (!state.relief) h += '&rel=0';
+    if (state.bg !== 'esri') h += '&bg=' + state.bg;
     history.replaceState(null, '', h);
   }
 
@@ -72,6 +74,8 @@
     $('isoRow').hidden = !manifest.isobars;
     $('isoToggle').checked = state.iso;
     $('isoToggle').addEventListener('change', function () { state.iso = this.checked; applyIso(); writeHash(); });
+    $('bgSelect').value = state.bg;
+    $('bgSelect').addEventListener('change', function () { state.bg = this.value; applyBg(); writeHash(); });
     $('reliefToggle').checked = state.relief;
     $('reliefToggle').addEventListener('change', function () { state.relief = this.checked; applyRelief(); writeHash(); });
   }
@@ -155,6 +159,14 @@
     get.then(function (g) { if (token === isoToken) map.getSource('isobars').setData(g); }).catch(function () {});
   }
 
+  // Dos fondos intercambiables: «esri» (gris claro + etiquetas aparte) y «osm» (etiquetas incluidas).
+  function applyBg() {
+    if (!ready) return;
+    var esri = state.bg === 'esri';
+    map.setLayoutProperty('base_esri', 'visibility', esri ? 'visible' : 'none');
+    map.setLayoutProperty('labels', 'visibility', esri ? 'visible' : 'none');
+    map.setLayoutProperty('base_osm', 'visibility', esri ? 'none' : 'visible');
+  }
   function applyRelief() {
     if (ready && map.getLayer('relief')) map.setLayoutProperty('relief', 'visibility', state.relief ? 'visible' : 'none');
   }
@@ -279,16 +291,19 @@
       style: {
         version: 8,
         sources: {
-          base: { type: 'raster', tileSize: 256, maxzoom: 20,
-            tiles: ['a', 'b', 'c', 'd'].map(function (n) { return 'https://' + n + '.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png'; }),
-            attribution: '© OpenStreetMap © CARTO · Deutscher Wetterdienst · Open-Meteo' },
-          labels: { type: 'raster', tileSize: 256, maxzoom: 20,
-            tiles: ['a', 'b', 'c', 'd'].map(function (n) { return 'https://' + n + '.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png'; }) },
+          base_esri: { type: 'raster', tileSize: 256, maxzoom: 16,
+            tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'],
+            attribution: 'Tiles © Esri — Esri, DeLorme, NAVTEQ · © OpenStreetMap · Deutscher Wetterdienst · Open-Meteo' },
+          labels: { type: 'raster', tileSize: 256, maxzoom: 16,
+            tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}'] },
+          base_osm: { type: 'raster', tileSize: 256, maxzoom: 19,
+            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], attribution: '© OpenStreetMap' },
           dem: { type: 'raster-dem', encoding: 'terrarium', tileSize: 256, maxzoom: 12,
             tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
             attribution: 'Relieve: Terrain Tiles (Mapzen/AWS)' },
         },
-        layers: [{ id: 'base', type: 'raster', source: 'base' }],
+        layers: [{ id: 'base_esri', type: 'raster', source: 'base_esri' },
+          { id: 'base_osm', type: 'raster', source: 'base_osm', layout: { visibility: 'none' } }],
       },
       maxBounds: [[-20, 28], [15, 52]],
     };
@@ -318,6 +333,7 @@
       }
       map.addLayer({ id: 'labels', type: 'raster', source: 'labels' });
       ready = true;
+      applyBg();
       applyIso();
     });
   }

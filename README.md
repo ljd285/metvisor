@@ -10,7 +10,7 @@ publican como imágenes en GitHub Pages. Plan completo: [`docs/PLAN.md`](docs/PL
   Sin `web/data/`, la web muestra datos de muestra sintéticos (etiqueta naranja).
 - Fase 3: valor bajo el cursor, meteograma al pulsar en el mapa (Open-Meteo, ICON-EU), isobaras, regiones y URL compartible
   (`#var=…&t=…&c=lat,lon,zoom`). Atajos: espacio = play, ← → = cambiar hora, `/` = buscar lugar, Esc = cerrar meteograma.
-- Fase 3b: mapa base CARTO con relieve (sombreado de Terrain Tiles de AWS) y etiquetas encima del campo; valores bajos
+- Fase 3b: mapa base con relieve (sombreado de Terrain Tiles de AWS) y etiquetas encima del campo; fondo seleccionable (gris claro de Esri u OpenStreetMap); valores bajos
   transparentes (`hide_below` en `pipeline/config.py`); buscador de lugares (Open-Meteo Geocoding) y marcador arrastrable
   para el meteograma.
 
@@ -35,5 +35,6 @@ docs/       plan de trabajo
 .github/    workflows
 ```
 
-Atribución: Deutscher Wetterdienst (ICON-EU), Open-Meteo, © OpenStreetMap, © CARTO, Mapzen/AWS Terrain Tiles.
-Nota: los mapas base de CARTO son gratuitos para uso no comercial; si el proyecto pasa a uso comercial habrá que cambiar de proveedor.
+Atribución: Deutscher Wetterdienst (ICON-EU), Open-Meteo, © OpenStreetMap, Esri, Mapzen/AWS Terrain Tiles.
+Nota: CARTO dejó de servir teselas sin clave (mostraba «API KEY REQUIRED»), por eso se usa Esri u OSM. Ambos son para uso ligero/no comercial;
+si el proyecto crece habrá que contratar un proveedor de teselas o autoalojarlas (p. ej. OpenFreeMap, MapTiler).
