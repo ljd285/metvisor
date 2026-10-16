@@ -32,6 +32,8 @@ jobs:
           cache-dependency-path: pipeline/requirements.txt
       - run: pip install -r pipeline/requirements.txt
       - name: Tests del pipeline
+        # En las ejecuciones programadas solo se refrescan los datos; los tests no deben bloquearlas.
+        if: github.event_name != 'schedule'
         run: python -m unittest discover -s pipeline/tests -t .
       - name: Generar datos ICON-EU
         # Si falla (p. ej. el DWD aún no ha publicado), se despliega la web con datos de muestra.
