@@ -152,6 +152,13 @@ class BuildTests(unittest.TestCase):
                 "CLCT": lambda s: np.full((NJ, NI), 50.0),
                 "TOT_PREC": lambda s: np.full((NJ, NI), 2.0 * s),  # 2 mm/h constantes
                 "VMAX_10M": lambda s: np.full((NJ, NI), 10.0),
+                "RELHUM_2M": lambda s: np.full((NJ, NI), 60.0),
+                "CAPE_ML": lambda s: np.full((NJ, NI), 500.0),
+                "HZEROCL": lambda s: np.full((NJ, NI), 3000.0),
+                "SNOW_GSP": lambda s: np.full((NJ, NI), 0.25 * s),
+                "SNOW_CON": lambda s: np.full((NJ, NI), 0.25 * s),     # 0,5 mm/h en total
+                "T@850": lambda s: np.full((NJ, NI), 273.15 + 5.0),
+                "FI@500": lambda s: np.full((NJ, NI), 5500 * 9.80665),   # 5500 m → 550 dam
             }
             for param, fn in content.items():
                 for s in steps:
@@ -160,7 +167,12 @@ class BuildTests(unittest.TestCase):
                     (src_dir / dwd.filename(RUN, s, param)).write_bytes(bz2.compress(make_grib(fn(s))))
             m = build.build(dwd.LocalSource(RUN, src_dir), out, steps, workers=2)
             self.assertEqual({v["id"] for v in m["variables"]},
-                             {"temperature_2m", "wind_speed_10m", "wind_gusts_10m", "pressure_msl", "precipitation", "cloud_cover"})
+                             {"temperature_2m", "wind_speed_10m", "wind_gusts_10m", "pressure_msl", "precipitation", "cloud_cover",
+                              "relative_humidity_2m", "cape", "freezing_level", "snowfall", "temperature_850", "geopotential_500"})
+            # Componentes del viento: solo rejilla de valores (sin imágenes ni entrada de menú).
+            self.assertFalse((out / "frames" / "wind_u_10m").exists())
+            self.assertTrue((out / "values" / "wind_u_10m.png").exists())
+            self.assertEqual(m["wind"]["u"], {"id": "wind_u_10m", "vmin": -80, "vmax": 80})
             man = json.loads((out / "manifest.json").read_text())
             self.assertEqual(man["run"], RUN)
             self.assertFalse(man["sample"])
@@ -187,9 +199,22 @@ class BuildTests(unittest.TestCase):
             self.assertAlmostEqual(mid_value("wind_speed_10m", 1), 18.0, delta=0.4)
             self.assertAlmostEqual(mid_value("precipitation", 2), 2.0, delta=0.05)
             self.assertAlmostEqual(mid_value("pressure_msl", 1), 1015.0, delta=0.2)
+            self.assertAlmostEqual(mid_value("snowfall", 2), 0.5, delta=0.05)
+            self.assertAlmostEqual(mid_value("temperature_850", 1), 5.0, delta=0.2)
+            self.assertAlmostEqual(mid_value("geopotential_500", 1), 550.0, delta=0.5)
+            self.assertAlmostEqual(mid_value("cape", 1), 500.0, delta=10)
+            # Valores del cursor del viento (m/s): U=3, V=4.
+            with Image.open(out / "values" / "wind_u_10m.png") as vi:
+                g = man["grid"]
+                self.assertAlmostEqual(values.decode_cell(vi.getpixel((g["nx"] // 2, g["ny"] // 2)), -80, 80), 3.0, delta=0.01)
 
 
 class DwdTests(unittest.TestCase):
+    def test_pressure_level_names(self):
+        self.assertEqual(dwd.filename("2026101506", 6, "T@850"),
+                         "icon-eu_europe_regular-lat-lon_pressure-level_2026101506_006_850_T.grib2.bz2")
+        self.assertTrue(dwd.url("2026101506", 6, "FI@500").startswith("https://opendata.dwd.de/weather/nwp/icon-eu/grib/06/fi/"))
+
     def test_url_layout(self):
         self.assertEqual(
             dwd.url("2026101506", 78, "T_2M"),

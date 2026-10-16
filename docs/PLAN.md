@@ -48,8 +48,8 @@ Workflow con cron y reintentos (los ficheros del DWD tardan en aparecer).
 **Fase 3 · Interacción (1–2 sesiones).** Valor bajo el cursor, clic → meteograma (Open-Meteo), regiones predefinidas,
 enlaces compartibles por URL (`#var=…&t=…&z=…`), precarga de frames.
 
-**Fase 4 · Más variables y capas.** CAPE, isoterma 0 °C, T850, geopotencial 500 hPa, nieve, humedad,
-flechas/partículas de viento (capa WebGL con U/V).
+**Fase 4 · Más variables y capas (hecha, pendiente de verificar con datos reales).** CAPE, isoterma 0 °C, T850, geopotencial 500 hPa, nieve, humedad,
+partículas de viento (canvas con U/V) y fronteras sobre el campo.
 
 **Fase 5 · Pulido.** Rendimiento (WebP, carga diferida), accesibilidad, PWA, tests del pipeline, monitor de fallos del cron.
 

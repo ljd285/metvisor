@@ -15,6 +15,11 @@ python -m pipeline.build --out web/data --max-step 6        # prueba rápida con
 python -m pipeline.build --out web/data                     # pasada completa (93 pasos)
 ```
 
+Variables (ver `config.py`): temperatura 2 m, viento 10 m, rachas, presión, humedad 2 m, precipitación, nieve, nubosidad, CAPE,
+isoterma 0 °C, temperatura 850 hPa y geopotencial 500 hPa. Las de nivel de presión se escriben `T@850`. Además se guardan, sin imágenes,
+las componentes U/V del viento (`values/wind_u_10m.png`, `wind_v_10m.png`) para las partículas.
+Si el DWD no publica algún parámetro, esa variable se omite con un aviso y el resto sigue.
+
 Notas:
 - Precipitación: `TOT_PREC` es acumulada; se convierte a mm/h con la diferencia entre pasos.
 - Rachas (`VMAX_10M`) no existen en +0 h: ese paso reutiliza el primero disponible.

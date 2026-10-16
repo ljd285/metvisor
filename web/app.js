@@ -2,7 +2,7 @@
 // Sin datos reales (manifest de muestra) siguen funcionando regiones, meteograma y URL.
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var state = { v: 0, t: 0, timer: null, c: null, iso: true, relief: true, bg: 'esri' };
+  var state = { v: 0, t: 0, timer: null, c: null, iso: true, relief: true, bg: 'esri', borders: true, wind: false };
   var manifest, map, source, runTime, ready = false;
   var DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
   var MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -36,6 +36,8 @@
     if (p.get('iso') === '0') state.iso = false;
     if (p.get('rel') === '0') state.relief = false;
     if (p.get('bg') === 'osm') state.bg = 'osm';
+    if (p.get('bor') === '0') state.borders = false;
+    if (p.get('wind') === '1') state.wind = true;
   }
   function writeHash() {
     var h = '#var=' + manifest.variables[state.v].id + '&t=' + state.t;
@@ -46,6 +48,8 @@
     if (!state.iso) h += '&iso=0';
     if (!state.relief) h += '&rel=0';
     if (state.bg !== 'esri') h += '&bg=' + state.bg;
+    if (!state.borders) h += '&bor=0';
+    if (state.wind) h += '&wind=1';
     history.replaceState(null, '', h);
   }
 
@@ -76,6 +80,11 @@
     $('isoToggle').addEventListener('change', function () { state.iso = this.checked; applyIso(); writeHash(); });
     $('bgSelect').value = state.bg;
     $('bgSelect').addEventListener('change', function () { state.bg = this.value; applyBg(); writeHash(); });
+    $('borderToggle').checked = state.borders;
+    $('borderToggle').addEventListener('change', function () { state.borders = this.checked; applyBorders(); writeHash(); });
+    $('windRow').hidden = !manifest.wind;
+    $('windToggle').checked = state.wind;
+    $('windToggle').addEventListener('change', function () { state.wind = this.checked; applyWind(); writeHash(); });
     $('reliefToggle').checked = state.relief;
     $('reliefToggle').addEventListener('change', function () { state.relief = this.checked; applyRelief(); writeHash(); });
   }
@@ -129,9 +138,9 @@
     if (!d) return null;
     return ValueGrid.sample(d.px, d.w, manifest.grid, v, state.t, lngLat.lat, lngLat.lng);
   }
+  var DECIMALS = { '°C': 1, 'km/h': 1, 'hPa': 1, 'mm/h': 2, 'dam': 1 };
   function fmt(x, unit) {
-    var dec = unit === 'hPa' || unit === 'km/h' || unit === '°C' || unit === 'mm/h' ? 1 : 0;
-    return x.toFixed(dec) + ' ' + unit;
+    return x.toFixed(DECIMALS[unit] != null ? DECIMALS[unit] : 0) + ' ' + unit;
   }
   var raf = 0;
   function onMove(e) {
@@ -167,6 +176,35 @@
     map.setLayoutProperty('labels', 'visibility', esri ? 'visible' : 'none');
     map.setLayoutProperty('base_osm', 'visibility', esri ? 'none' : 'visible');
   }
+  function applyBorders() {
+    if (ready && map.getLayer('borders')) map.setLayoutProperty('borders', 'visibility', state.borders ? 'visible' : 'none');
+  }
+
+  // ---------- Viento animado ----------
+  var particles, windGrids = null, windLoading = false;
+  function windAt(lat, lng) {
+    var g = windGrids, wd = manifest.wind;
+    if (!g) return null;
+    var u = ValueGrid.sample(g.u.px, g.u.w, manifest.grid, wd.u, state.t, lat, lng);
+    var v = ValueGrid.sample(g.v.px, g.v.w, manifest.grid, wd.v, state.t, lat, lng);
+    return u == null || v == null ? null : [u, v];
+  }
+  function sizeWind() {
+    if (particles) particles.resize($('stage').clientWidth, $('stage').clientHeight);
+  }
+  function applyWind() {
+    if (!manifest.wind || !manifest.grid) return;
+    if (!state.wind) { if (particles) particles.stop(); return; }
+    if (!particles) { particles = Particles.create($('windCanvas'), map, windAt); sizeWind(); }
+    if (windGrids) { particles.start(); return; }
+    if (windLoading) return;
+    windLoading = true;
+    Promise.all([ValueGrid.load('data/values/' + manifest.wind.u.id + '.png'), ValueGrid.load('data/values/' + manifest.wind.v.id + '.png')])
+      .then(function (r) { windGrids = { u: r[0], v: r[1] }; if (state.wind) particles.start(); })
+      .catch(function () { state.wind = false; $('windToggle').checked = false; })
+      .then(function () { windLoading = false; });
+  }
+
   function applyRelief() {
     if (ready && map.getLayer('relief')) map.setLayoutProperty('relief', 'visibility', state.relief ? 'visible' : 'none');
   }
@@ -312,6 +350,8 @@
     map = new maplibregl.Map(opts);
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     map.on('moveend', writeHash);
+    map.on('move', function () { if (particles && particles.running) particles.clear(); });
+    window.addEventListener('resize', sizeWind);
     map.on('mousemove', onMove);
     map.on('mouseout', function () { $('cursor').hidden = true; });
     map.on('click', function (e) { openMeteogram(e.lngLat); });
@@ -325,6 +365,10 @@
         layout: { visibility: state.relief ? 'visible' : 'none' },
         paint: { 'hillshade-exaggeration': 0.45, 'hillshade-shadow-color': '#26323f', 'hillshade-highlight-color': '#ffffff',
           'hillshade-accent-color': '#3a4856', 'hillshade-illumination-direction': 315 } });
+      map.addSource('borders', { type: 'geojson', data: 'geo/borders.json' });
+      map.addLayer({ id: 'borders', type: 'line', source: 'borders',
+        layout: { visibility: state.borders ? 'visible' : 'none', 'line-join': 'round' },
+        paint: { 'line-color': '#2f3b47', 'line-opacity': 0.85, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.9, 8, 1.8] } });
       if (manifest.isobars) {
         map.addSource('isobars', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addLayer({ id: 'isobars', type: 'line', source: 'isobars',
@@ -335,6 +379,8 @@
       ready = true;
       applyBg();
       applyIso();
+      sizeWind();
+      applyWind();
     });
   }
 

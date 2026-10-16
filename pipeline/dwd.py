@@ -9,12 +9,24 @@ from pathlib import Path
 from . import config
 
 
+def _split(param: str):
+    """«T_2M» → («T_2M», None); «T@850» → («T», 850)."""
+    if "@" in param:
+        name, level = param.split("@")
+        return name, int(level)
+    return param, None
+
+
 def filename(run: str, step: int, param: str) -> str:
-    return f"icon-eu_europe_regular-lat-lon_single-level_{run}_{step:03d}_{param}.grib2.bz2"
+    name, level = _split(param)
+    if level is None:
+        return f"icon-eu_europe_regular-lat-lon_single-level_{run}_{step:03d}_{name}.grib2.bz2"
+    return f"icon-eu_europe_regular-lat-lon_pressure-level_{run}_{step:03d}_{level}_{name}.grib2.bz2"
 
 
 def url(run: str, step: int, param: str) -> str:
-    return f"{config.BASE_URL}/{run[8:10]}/{param.lower()}/{filename(run, step, param)}"
+    name, _ = _split(param)
+    return f"{config.BASE_URL}/{run[8:10]}/{name.lower()}/{filename(run, step, param)}"
 
 
 class HttpSource:

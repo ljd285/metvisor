@@ -29,37 +29,28 @@ def load_param(source, param, steps, workers):
         return dict(ex.map(one, steps))
 
 
+def _like(f, data):
+    return grib.Field(data, f.lat0, f.lon0, f.dlat, f.dlon)
+
+
 def derive(spec, fields, steps):
     """Devuelve {paso: Field|None} ya en las unidades finales de la variable."""
-    kind = spec["kind"]
-
-    def mapped(src, fn):
-        out = {}
-        for s in steps:
-            f = src.get(s)
-            out[s] = None if f is None else grib.Field(fn(f.data), f.lat0, f.lon0, f.dlat, f.dlon)
-        return out
-
-    if kind == "temp":
-        return mapped(fields["T_2M"], lambda d: d - 273.15)
-    if kind == "pressure":
-        return mapped(fields["PMSL"], lambda d: d / 100.0)
-    if kind == "cloud":
-        return mapped(fields["CLCT"], lambda d: d)
-    if kind == "gust":
-        return mapped(fields["VMAX_10M"], lambda d: d * 3.6)
+    kind, params = spec["kind"], spec["params"]
+    if kind == "linear":
+        scale, offset = spec.get("scale", 1), spec.get("offset", 0)
+        return {s: None if fields[params[0]].get(s) is None else _like(fields[params[0]][s], fields[params[0]][s].data * scale + offset)
+                for s in steps}
     if kind == "wind":
         u, v = fields["U_10M"], fields["V_10M"]
-        out = {}
+        return {s: None if u.get(s) is None or v.get(s) is None else _like(u[s], np.hypot(u[s].data, v[s].data) * 3.6)
+                for s in steps}
+    if kind == "accum":  # acumulada desde el inicio de la pasada (suma de params) → tasa por hora
+        out, prev, acc = {}, None, {}
         for s in steps:
-            fu, fv = u.get(s), v.get(s)
-            out[s] = None if fu is None or fv is None else grib.Field(
-                np.hypot(fu.data, fv.data) * 3.6, fu.lat0, fu.lon0, fu.dlat, fu.dlon)
-        return out
-    if kind == "precip":  # TOT_PREC es acumulada desde el inicio de la pasada → tasa mm/h
-        acc, out, prev = fields["TOT_PREC"], {}, None
+            fs = [fields[p].get(s) for p in params]
+            acc[s] = None if any(f is None for f in fs) else _like(fs[0], sum(f.data for f in fs))
         for s in steps:
-            f = acc.get(s)
+            f = acc[s]
             if f is None:
                 out[s] = None
                 continue
@@ -67,7 +58,7 @@ def derive(spec, fields, steps):
                 rate = np.zeros_like(f.data) if s == 0 else f.data / s
             else:
                 rate = (f.data - acc[prev].data) / (s - prev)
-            out[s] = grib.Field(np.clip(rate, 0, None), f.lat0, f.lon0, f.dlat, f.dlon)
+            out[s] = _like(f, np.clip(rate, 0, None))
             prev = s
         return out
     raise ValueError(f"Variable desconocida: {kind}")
@@ -85,7 +76,7 @@ def build(source, out_dir: Path, steps, workers=6):
         print(f"Descargando {p} ({len(steps)} pasos)…", flush=True)
         fields[p] = load_param(source, p, steps, workers)
 
-    manifest_vars, image_bounds, size, grid, pressure = [], None, None, None, None
+    manifest_vars, hidden_vars, image_bounds, size, grid, pressure = [], {}, None, None, None, None
     (tmp / "values").mkdir()
     for spec in config.VARIABLES:
         derived = derive(spec, fields, steps)
@@ -93,8 +84,10 @@ def build(source, out_dir: Path, steps, workers=6):
         if not avail:
             print(f"AVISO: sin datos para {spec['id']}; se omite", file=sys.stderr)
             continue
+        hidden = spec.get("hidden", False)
         vdir = tmp / "frames" / spec["id"]
-        vdir.mkdir()
+        if not hidden:
+            vdir.mkdir()
         value_frames = []
         for s in steps:
             f = derived[s]
@@ -104,9 +97,10 @@ def build(source, out_dir: Path, steps, workers=6):
             if f is None:
                 value_frames.append(None)
                 continue
-            arr, image_bounds = render.to_mercator(f, config.SCALE)
-            size = arr.shape
-            render.to_png(arr, spec, vdir / f"{s:03d}.png")
+            if not hidden:
+                arr, image_bounds = render.to_mercator(f, config.SCALE)
+                size = arr.shape
+                render.to_png(arr, spec, vdir / f"{s:03d}.png")
             value_frames.append(f.data)
             if grid is None:
                 ny, nx = f.data.shape
@@ -114,8 +108,11 @@ def build(source, out_dir: Path, steps, workers=6):
         ny, nx = grid["ny"], grid["nx"]
         values.encode_stack(value_frames, ny, nx, spec["vmin"], spec["vmax"]).save(
             tmp / "values" / f"{spec['id']}.png", optimize=True)
-        if spec["kind"] == "pressure":
+        if spec["id"] == "pressure_msl":
             pressure = derived
+        if hidden:
+            hidden_vars[spec["id"]] = {"id": spec["id"], "vmin": spec["vmin"], "vmax": spec["vmax"]}
+            continue
         manifest_vars.append({k: spec[k] for k in ("id", "group", "label", "unit", "min", "max", "colors", "vmin", "vmax")}
                              | ({"hide_below": spec["hide_below"]} if "hide_below" in spec else {}))
         print(f"  {spec['id']}: {len(avail)}/{len(steps)} pasos", flush=True)
@@ -142,6 +139,8 @@ def build(source, out_dir: Path, steps, workers=6):
         "imageSize": {"width": size[1], "height": size[0]},
         "grid": grid,
         "isobars": isobars,
+        "wind": ({"u": hidden_vars["wind_u_10m"], "v": hidden_vars["wind_v_10m"]}
+                 if {"wind_u_10m", "wind_v_10m"} <= hidden_vars.keys() else None),
         "steps": steps,
         "variables": manifest_vars,
     }
