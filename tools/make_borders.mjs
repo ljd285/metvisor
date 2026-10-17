@@ -1,6 +1,10 @@
-// Genera web/geo/borders.json (fronteras entre países) y web/geo/coast.json (líneas de costa),
-// Natural Earth 10m (dominio público) desde el paquete npm world-atlas, recortado a la zona del visor.
-//   cd tools && npm install world-atlas topojson-client && node make_borders.mjs ../web/geo
+// Genera en web/geo:
+//   borders.json    fronteras entre países         (Natural Earth 10m, dominio público, paquete npm world-atlas)
+//   coast.json      líneas de costa                (ídem)
+//   regions.json    límites entre comunidades autónomas  (IGN España, paquete npm es-atlas)
+//   provinces.json  límites entre provincias             (ídem)
+// Todo recortado a la zona del visor.
+//   cd tools && npm install world-atlas es-atlas topojson-client && node make_borders.mjs ../web/geo
 import { readFileSync, writeFileSync } from 'node:fs';
 import { mesh } from 'topojson-client';
 
@@ -53,3 +57,10 @@ const countries = JSON.parse(readFileSync('node_modules/world-atlas/countries-10
 write(`${dir}/borders.json`, countries, countries.objects.countries, (a, b) => a !== b, 'Natural Earth 10m via world-atlas'); // arcos compartidos entre países
 const land = JSON.parse(readFileSync('node_modules/world-atlas/land-10m.json', 'utf8'));
 write(`${dir}/coast.json`, land, land.objects.land, undefined, 'Natural Earth 10m via world-atlas');
+
+// España (IGN): solo los arcos compartidos por dos entidades, es decir, límites interiores; las costas y las fronteras con
+// otros países ya están en coast.json y borders.json.
+const spain = JSON.parse(readFileSync('node_modules/es-atlas/es/provinces.json', 'utf8'));
+const ign = 'IGN España via es-atlas';
+write(`${dir}/regions.json`, spain, spain.objects.autonomous_regions, (a, b) => a !== b, ign);
+write(`${dir}/provinces.json`, spain, spain.objects.provinces, (a, b) => a !== b, ign);

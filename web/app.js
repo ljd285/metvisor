@@ -2,7 +2,7 @@
 // Sin datos reales (manifest de muestra) siguen funcionando regiones, meteograma y URL.
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var state = { v: 0, t: 0, timer: null, c: null, iso: true, relief: true, bg: 'esri', borders: true, wind: false };
+  var state = { v: 0, t: 0, timer: null, c: null, iso: true, relief: true, bg: 'esri', borders: true, regions: true, provinces: true, wind: false };
   var manifest, map, source, runTime, ready = false;
   var DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
   var MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -37,6 +37,8 @@
     if (p.get('rel') === '0') state.relief = false;
     if (p.get('bg') === 'osm') state.bg = 'osm';
     if (p.get('bor') === '0') state.borders = false;
+    if (p.get('com') === '0') state.regions = false;
+    if (p.get('prov') === '0') state.provinces = false;
     if (p.get('wind') === '1') state.wind = true;
   }
   function writeHash() {
@@ -49,6 +51,8 @@
     if (!state.relief) h += '&rel=0';
     if (state.bg !== 'esri') h += '&bg=' + state.bg;
     if (!state.borders) h += '&bor=0';
+    if (!state.regions) h += '&com=0';
+    if (!state.provinces) h += '&prov=0';
     if (state.wind) h += '&wind=1';
     history.replaceState(null, '', h);
   }
@@ -83,6 +87,10 @@
     $('bgSelect').addEventListener('change', function () { state.bg = this.value; applyBg(); writeHash(); });
     $('borderToggle').checked = state.borders;
     $('borderToggle').addEventListener('change', function () { state.borders = this.checked; applyBorders(); writeHash(); });
+    $('regionToggle').checked = state.regions;
+    $('regionToggle').addEventListener('change', function () { state.regions = this.checked; applyBorders(); writeHash(); });
+    $('provinceToggle').checked = state.provinces;
+    $('provinceToggle').addEventListener('change', function () { state.provinces = this.checked; applyBorders(); writeHash(); });
     $('windRow').hidden = !manifest.wind;
     $('windToggle').checked = state.wind;
     $('windToggle').addEventListener('change', function () { state.wind = this.checked; applyWind(); writeHash(); });
@@ -227,10 +235,12 @@
     map.setLayoutProperty('labels', 'visibility', esri ? 'visible' : 'none');
     map.setLayoutProperty('base_osm', 'visibility', esri ? 'none' : 'visible');
   }
+  // Líneas administrativas: costas y fronteras de países, límites de comunidades y límites de provincias.
+  var VECTOR_LAYERS = { coast: 'borders', borders: 'borders', regions: 'regions', provinces: 'provinces' };
   function applyBorders() {
     if (!ready) return;
-    ['coast', 'borders'].forEach(function (id) {
-      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', state.borders ? 'visible' : 'none');
+    Object.keys(VECTOR_LAYERS).forEach(function (id) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', state[VECTOR_LAYERS[id]] ? 'visible' : 'none');
     });
   }
 
@@ -438,11 +448,20 @@
         layout: { visibility: state.relief ? 'visible' : 'none' },
         paint: { 'hillshade-exaggeration': 0.45, 'hillshade-shadow-color': '#26323f', 'hillshade-highlight-color': '#ffffff',
           'hillshade-accent-color': '#3a4856', 'hillshade-illumination-direction': 315 } });
-      // Costas y fronteras por encima del campo (y del relieve), por debajo de isobaras y etiquetas.
+      // Líneas por encima del campo (y del relieve), por debajo de isobaras y etiquetas. De fina a gruesa:
+      // costas, provincias (punteadas), comunidades (rayas) y fronteras de países (continuas).
+      function vis(flag) { return { visibility: state[flag] ? 'visible' : 'none', 'line-join': 'round' }; }
+      function width(a, b) { return ['interpolate', ['linear'], ['zoom'], 4, a, 8, b]; }
       map.addSource('coast', { type: 'geojson', data: 'geo/coast.json' });
-      map.addLayer({ id: 'coast', type: 'line', source: 'coast',
-        layout: { visibility: state.borders ? 'visible' : 'none', 'line-join': 'round' },
-        paint: { 'line-color': '#2f3b47', 'line-opacity': 0.7, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.7, 8, 1.4] } });
+      map.addLayer({ id: 'coast', type: 'line', source: 'coast', layout: vis('borders'),
+        paint: { 'line-color': '#2f3b47', 'line-opacity': 0.7, 'line-width': width(0.7, 1.4) } });
+      map.addSource('provinces', { type: 'geojson', data: 'geo/provinces.json' });
+      map.addLayer({ id: 'provinces', type: 'line', source: 'provinces', layout: vis('provinces'),
+        paint: { 'line-color': '#46545f', 'line-width': width(0.5, 1.1), 'line-dasharray': [2, 2],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 4, 0.3, 7, 0.65] } });   // se desvanecen al alejar el mapa
+      map.addSource('regions', { type: 'geojson', data: 'geo/regions.json' });
+      map.addLayer({ id: 'regions', type: 'line', source: 'regions', layout: vis('regions'),
+        paint: { 'line-color': '#2f3b47', 'line-opacity': 0.8, 'line-width': width(0.9, 1.8), 'line-dasharray': [5, 2] } });
       map.addSource('borders', { type: 'geojson', data: 'geo/borders.json' });
       map.addLayer({ id: 'borders', type: 'line', source: 'borders',
         layout: { visibility: state.borders ? 'visible' : 'none', 'line-join': 'round' },

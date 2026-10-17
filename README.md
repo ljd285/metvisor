@@ -14,6 +14,8 @@ publican como imágenes en GitHub Pages. Plan completo: [`docs/PLAN.md`](docs/PL
   transparentes (`hide_below` en `pipeline/config.py`); buscador de lugares (Open-Meteo Geocoding) y marcador arrastrable
   para el meteograma.
 
+- Límites de comunidades autónomas y provincias de España (IGN, paquete npm `es-atlas`), con interruptores propios en "Capas":
+  comunidades en raya, provincias punteadas (se desvanecen al alejar el mapa) y fronteras de países en continuo.
 - Datos ligeros: fotogramas WebP (con pérdida en las variables suaves), rejillas de valores de 12 bit por paso (solo se descarga el paso
   que se consulta), URLs con la versión de la pasada para no mezclar ficheros en la caché del navegador.
 - Isobaras con etiqueta (hPa) cada ~500 km a lo largo de cada línea, giradas según el trazo; se dibujan en un canvas propio
@@ -47,7 +49,8 @@ docs/       plan de trabajo
 .github/    workflows
 ```
 
-Fronteras y costas: Natural Earth (dominio público), vía el paquete npm `world-atlas`; se regeneran con `tools/make_borders.mjs`.
+Fronteras y costas: Natural Earth (dominio público), vía el paquete npm `world-atlas`. Comunidades y provincias: © Instituto Geográfico Nacional de España (CC BY 4.0),
+vía el paquete npm `es-atlas` (MIT). Todo se regenera con `tools/make_borders.mjs`.
 Atribución: Deutscher Wetterdienst (ICON-EU), Open-Meteo, © OpenStreetMap, Esri, Mapzen/AWS Terrain Tiles.
 Nota: CARTO dejó de servir teselas sin clave (mostraba «API KEY REQUIRED»), por eso se usa Esri u OSM. Ambos son para uso ligero/no comercial;
 si el proyecto crece habrá que contratar un proveedor de teselas o autoalojarlas (p. ej. OpenFreeMap, MapTiler).
