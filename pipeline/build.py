@@ -85,33 +85,37 @@ def build(source, out_dir: Path, steps, workers=6):
             print(f"AVISO: sin datos para {spec['id']}; se omite", file=sys.stderr)
             continue
         hidden = spec.get("hidden", False)
-        vdir = tmp / "frames" / spec["id"]
+        stride = spec.get("stride", 1)
+        vdir, valdir = tmp / "frames" / spec["id"], tmp / "values" / spec["id"]
+        valdir.mkdir()
         if not hidden:
             vdir.mkdir()
-        value_frames = []
+        var_grid = None
+        jobs = []  # escrituras de imágenes: se hacen en paralelo
         for s in steps:
             f = derived[s]
             if f is None and s < avail[0]:
                 # Pasos ausentes al inicio (p. ej. rachas en +0 h): se usa el primer paso disponible.
                 f = derived[avail[0]]
             if f is None:
-                value_frames.append(None)
-                continue
+                continue  # sin fichero: la web lo trata como «sin dato»
             if not hidden:
                 arr, image_bounds = render.to_mercator(f, config.SCALE)
                 size = arr.shape
-                render.to_png(arr, spec, vdir / f"{s:03d}.png")
-            value_frames.append(f.data)
-            if grid is None:
-                ny, nx = f.data.shape
-                grid = {"nx": nx, "ny": ny, "lat0": f.lat0, "lon0": f.lon0, "dlat": f.dlat, "dlon": f.dlon}
-        ny, nx = grid["ny"], grid["nx"]
-        values.encode_stack(value_frames, ny, nx, spec["vmin"], spec["vmax"]).save(
-            tmp / "values" / f"{spec['id']}.png", optimize=True)
+                jobs.append((render.to_webp, (arr, spec, vdir / f"{s:03d}.webp", bool(spec.get("lossy")), config.FRAME_QUALITY)))
+            data = f.data[::stride, ::stride]
+            jobs.append((values.save_step, (data, spec["vmin"], spec["vmax"], valdir / f"{s:03d}.webp")))
+            if var_grid is None:
+                ny, nx = data.shape
+                var_grid = {"nx": nx, "ny": ny, "lat0": f.lat0, "lon0": f.lon0, "dlat": f.dlat * stride, "dlon": f.dlon * stride}
+        with ThreadPoolExecutor(workers) as ex:
+            list(ex.map(lambda j: j[0](*j[1]), jobs))
+        if stride == 1 and grid is None:
+            grid = var_grid
         if spec["id"] == "pressure_msl":
             pressure = derived
         if hidden:
-            hidden_vars[spec["id"]] = {"id": spec["id"], "vmin": spec["vmin"], "vmax": spec["vmax"]}
+            hidden_vars[spec["id"]] = {"id": spec["id"], "vmin": spec["vmin"], "vmax": spec["vmax"], "grid": var_grid}
             continue
         manifest_vars.append({k: spec[k] for k in ("id", "group", "label", "unit", "min", "max", "colors", "vmin", "vmax")}
                              | ({"hide_below": spec["hide_below"]} if "hide_below" in spec else {}))
@@ -138,6 +142,7 @@ def build(source, out_dir: Path, steps, workers=6):
         "bounds": image_bounds,
         "imageSize": {"width": size[1], "height": size[0]},
         "grid": grid,
+        "formats": {"frame": "webp", "values": "webp", "valueBits": 12},
         "isobars": isobars,
         "wind": ({"u": hidden_vars["wind_u_10m"], "v": hidden_vars["wind_v_10m"]}
                  if {"wind_u_10m", "wind_v_10m"} <= hidden_vars.keys() else None),

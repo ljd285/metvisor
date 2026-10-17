@@ -1,26 +1,35 @@
-"""Rejilla de valores para el cursor: un PNG RGB por variable con todos los pasos apilados.
+"""Rejilla de valores para el cursor y el viento animado: un WebP sin pérdida por variable y paso.
 
-Cada píxel guarda el valor en 16 bit (R = byte alto, G = byte bajo) entre vmin y vmax; B = 255 marca «sin dato».
-La rejilla es la nativa de ICON-EU recortada al dominio (no la de Mercator), así que no hay pérdida por reproyección.
+Cada píxel guarda el valor en 12 bit entre vmin y vmax: R = 8 bits altos, G = 4 bits bajos en el nibble alto; B = 255 marca
+«sin dato». La rejilla es la nativa de ICON-EU recortada al dominio (no la de Mercator), así que no hay pérdida por reproyección.
+Se publica un fichero por paso para que el navegador solo descargue el que está viendo el usuario.
 """
 import numpy as np
 from PIL import Image
 
+LEVELS = (1 << 12) - 1  # 4095 niveles
 
-def encode_stack(frames, ny, nx, vmin, vmax):
-    """frames: lista de arrays (ny, nx) o None. Devuelve una imagen PIL de (len*ny) filas."""
-    out = np.zeros((len(frames) * ny, nx, 3), dtype=np.uint8)
-    for k, a in enumerate(frames):
-        block = out[k * ny:(k + 1) * ny]
-        if a is None:
-            block[..., 2] = 255
-            continue
-        bad = ~np.isfinite(a)
-        q = np.clip(np.round((np.nan_to_num(a, nan=vmin) - vmin) / (vmax - vmin) * 65534), 0, 65534).astype(np.uint16)
-        block[..., 0] = q >> 8
-        block[..., 1] = q & 255
-        block[..., 2] = np.where(bad, 255, 0)
+
+def encode_step(a, vmin, vmax):
+    """Imagen PIL RGB (ny × nx) con el campo `a`, o None si `a` es None."""
+    if a is None:
+        return None
+    bad = ~np.isfinite(a)
+    q = np.clip(np.round((np.nan_to_num(a, nan=vmin) - vmin) / (vmax - vmin) * LEVELS), 0, LEVELS).astype(np.uint16)
+    out = np.zeros(a.shape + (3,), dtype=np.uint8)
+    out[..., 0] = q >> 4
+    out[..., 1] = (q & 15) << 4
+    out[..., 2] = np.where(bad, 255, 0)
     return Image.fromarray(out, mode="RGB")
+
+
+def save_step(a, vmin, vmax, path):
+    """Guarda el paso como WebP sin pérdida. Devuelve False si no hay datos (no se escribe nada)."""
+    img = encode_step(a, vmin, vmax)
+    if img is None:
+        return False
+    img.save(path, "WEBP", lossless=True, quality=100, method=4)
+    return True
 
 
 def decode_cell(rgb, vmin, vmax):
@@ -28,4 +37,4 @@ def decode_cell(rgb, vmin, vmax):
     r, g, b = (int(x) for x in rgb)
     if b == 255:
         return None
-    return vmin + (r * 256 + g) / 65534 * (vmax - vmin)
+    return vmin + ((r << 4) | (g >> 4)) / LEVELS * (vmax - vmin)

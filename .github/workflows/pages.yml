@@ -34,7 +34,9 @@ jobs:
       - name: Tests del pipeline
         # En las ejecuciones programadas solo se refrescan los datos; los tests no deben bloquearlas.
         if: github.event_name != 'schedule'
-        run: python -m unittest discover -s pipeline/tests -t .
+        run: |
+          python -m unittest discover -s pipeline/tests -t .
+          node --test web/test/*.test.js
       # Recupera la última pasada buena: si la generación falla, se despliega esa (con aviso de antigüedad en la web)
       # en lugar de los datos de muestra.
       - name: Restaurar última pasada buena

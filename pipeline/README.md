@@ -3,8 +3,12 @@
 Descarga ICON-EU (rejilla regular lat-lon) de `opendata.dwd.de` y genera en `web/data/`:
 
 - `manifest.json`: pasada, pasos, límites de la imagen, variables y paletas.
-- `frames/<variable>/<paso>.png`: PNG paletizado en Web Mercator (índice 255 = sin dato).
-- `values/<variable>.png`: rejilla nativa con el valor de cada celda en 16 bit (R,G; B=255 sin dato), pasos apilados en vertical. La web la lee para mostrar el valor bajo el cursor.
+- `frames/<variable>/<paso>.webp`: imagen RGBA en Web Mercator. Las variables suaves y sin transparencia (`lossy: True` en `config.py`:
+  temperatura, presión, humedad, 850 hPa, geopotencial, isoterma 0 °C) van en WebP con pérdida (calidad 85, ~5 veces más ligeras);
+  el resto, en WebP sin pérdida para conservar exactos los bordes transparentes (`hide_below`).
+- `values/<variable>/<paso>.webp`: rejilla nativa con el valor de cada celda en 12 bit (R = 8 bits altos, G = 4 bajos; B = 255 sin dato),
+  WebP sin pérdida. Un fichero por paso: la web solo descarga el del paso que se mira. El viento (`wind_u_10m`, `wind_v_10m`) usa
+  media resolución (`stride: 2`) y su rejilla va en `manifest.wind.*.grid`.
 - `isobars/<paso>.json`: isobaras cada 4 hPa (GeoJSON, marching squares sobre la presión a nivel del mar). Los segmentos se unen en
   polilíneas y sobre cada una se colocan puntos de etiqueta (`Point` con `p` = hPa y `a` = ángulo en pantalla, entre -90° y 90°).
 

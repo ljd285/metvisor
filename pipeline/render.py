@@ -61,14 +61,37 @@ def palette(colors):
     return np.vstack([ramp, [[0, 0, 0]]])
 
 
-def to_png(values: np.ndarray, spec: dict, path):
-    """Escribe un PNG paletizado; NaN y valores por debajo de spec["hide_below"] → transparente."""
+def _indices(values: np.ndarray, spec: dict) -> np.ndarray:
+    """Índice de paleta por píxel; NaN y valores por debajo de spec["hide_below"] → TRANSPARENT."""
     t = (values - spec["min"]) / (spec["max"] - spec["min"])
     idx = np.clip(np.round(np.nan_to_num(t) * (TRANSPARENT - 1)), 0, TRANSPARENT - 1).astype(np.uint8)
     idx[~np.isfinite(values)] = TRANSPARENT
     hide = spec.get("hide_below")
     if hide is not None:
         idx[values < hide] = TRANSPARENT
+    return idx
+
+
+def to_png(values: np.ndarray, spec: dict, path):
+    """Escribe un PNG paletizado; NaN y valores por debajo de spec["hide_below"] → transparente."""
+    idx = _indices(values, spec)
     img = Image.fromarray(idx, mode="P")
     img.putpalette(palette(spec["colors"]).astype(np.uint8).flatten().tolist())
     img.save(path, optimize=True, transparency=TRANSPARENT)
+
+
+def to_webp(values: np.ndarray, spec: dict, path, lossy: bool = False, quality: int = 85):
+    """Escribe un WebP RGBA. Con pérdida (`lossy`) es ~5 veces más ligero en campos suaves; sin pérdida conserva los
+    bordes transparentes exactos. Bajo los píxeles transparentes se pone el color del umbral (el de sus vecinos
+    visibles) para que la compresión no manche los bordes."""
+    idx = _indices(values, spec)
+    pal = palette(spec["colors"])
+    hide = spec.get("hide_below")
+    fill = 0 if hide is None else int(np.clip(round((hide - spec["min"]) / (spec["max"] - spec["min"]) * (TRANSPARENT - 1)), 0, TRANSPARENT - 1))
+    rgb = pal[np.where(idx == TRANSPARENT, fill, idx)]
+    rgba = np.dstack([rgb, np.where(idx == TRANSPARENT, 0, 255).astype(np.uint8)]).astype(np.uint8)
+    img = Image.fromarray(rgba, mode="RGBA")
+    if lossy:
+        img.save(path, "WEBP", quality=quality, alpha_quality=100, method=4)
+    else:
+        img.save(path, "WEBP", lossless=True, quality=100, method=4)  # method 6 tarda ~30 veces más sin ahorrar apenas

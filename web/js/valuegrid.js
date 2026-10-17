@@ -1,23 +1,31 @@
-// Lectura de la rejilla de valores del pipeline (data/values/<variable>.png).
-// Cada píxel: R,G = valor 16 bit entre vmin y vmax; B = 255 → sin dato. Los pasos van apilados en vertical.
+// Lectura de la rejilla de valores del pipeline (data/values/<variable>/<paso>.webp), un fichero por paso.
+// Cada píxel: R = 8 bits altos y G = 4 bits bajos (en el nibble alto) del valor en 12 bit entre vmin y vmax; B = 255 → sin dato.
 (function () {
-  // Interpolación bilineal en (lat, lon) para el paso stepIdx. px = RGBA de la imagen, w = ancho.
-  function sample(px, w, g, v, stepIdx, lat, lon) {
+  var LEVELS = 4095;
+
+  // Interpolación bilineal en (lat, lon). px = RGBA de la imagen, w = ancho, g = {nx, ny, lat0, lon0, dlat, dlon}.
+  function sample(px, w, g, v, lat, lon) {
     var fx = (lon - g.lon0) / g.dlon, fy = (g.lat0 - lat) / g.dlat;
     if (!(fx >= 0 && fy >= 0 && fx <= g.nx - 1 && fy <= g.ny - 1)) return null;
     var x0 = Math.min(Math.floor(fx), g.nx - 2), y0 = Math.min(Math.floor(fy), g.ny - 2);
     var tx = fx - x0, ty = fy - y0;
     function at(x, y) {
-      var o = ((stepIdx * g.ny + y) * w + x) * 4;
+      var o = (y * w + x) * 4;
       if (px[o + 2] === 255) return NaN;
-      return v.vmin + (px[o] * 256 + px[o + 1]) / 65534 * (v.vmax - v.vmin);
+      return v.vmin + ((px[o] << 4) | (px[o + 1] >> 4)) / LEVELS * (v.vmax - v.vmin);
     }
-    var a = at(x0, y0), b = at(x0 + 1, y0), c = at(x0, y0 + 1), d = at(x0 + 1, y0 + 1);
-    var r = (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
-    return isNaN(r) ? null : r;
+    // Una celda sin dato solo anula el resultado si interviene con peso (sobre una esquina exacta no cuenta).
+    var sum = 0, corners = [[x0, y0, (1 - tx) * (1 - ty)], [x0 + 1, y0, tx * (1 - ty)], [x0, y0 + 1, (1 - tx) * ty], [x0 + 1, y0 + 1, tx * ty]];
+    for (var i = 0; i < 4; i++) {
+      if (corners[i][2] === 0) continue;
+      var val = at(corners[i][0], corners[i][1]);
+      if (isNaN(val)) return null;
+      sum += val * corners[i][2];
+    }
+    return sum;
   }
 
-  // Carga la imagen y devuelve {px, w, h}. Se pide una vez por variable y se guarda en caché.
+  // Carga la imagen y devuelve {px, w, h}.
   function load(url) {
     return new Promise(function (resolve, reject) {
       var img = new Image();

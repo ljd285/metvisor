@@ -9,7 +9,7 @@ import numpy as np
 import eccodes
 from PIL import Image
 
-from pipeline import build, contours, dwd, grib, render, values
+from pipeline import build, config, contours, dwd, grib, render, values
 
 RUN = "2026101506"
 # Rejilla de prueba más grande que el dominio, como ICON-EU (0,0625°), pero con paso 0,25° para ir rápido.
@@ -94,18 +94,57 @@ class HideBelowTests(unittest.TestCase):
         self.assertEqual(alphas, [0, 255, 255, 0])  # 0.5 y 0.0 ocultos; 1.0 (= umbral) y 5.0 visibles
 
 
+class WebpTests(unittest.TestCase):
+    SPEC = {"min": 0, "max": 10, "colors": ["#000000", "#ffffff"], "hide_below": 1.0}
+
+    def test_lossless_keeps_alpha_and_colors_exactly(self):
+        v = np.array([[0.5, 1.0], [5.0, np.nan]])
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "a.webp"
+            render.to_webp(v, self.SPEC, p, lossy=False)
+            with Image.open(p) as im:
+                px = np.asarray(im.convert("RGBA")).astype(int)
+        self.assertEqual(list(px[..., 3].flatten()), [0, 255, 255, 0])
+        self.assertEqual(tuple(px[1, 0, :3]), tuple(render.palette(self.SPEC["colors"])[127]))   # 5.0 → mitad de la rampa
+
+    def test_lossy_is_much_smaller_on_smooth_fields_and_close_in_color(self):
+        h, w = 220, 245
+        v = 20 + 10 * np.linspace(0, 1, h)[:, None] + 4 * np.sin(np.linspace(0, 6, w))[None, :]
+        spec = {"min": -10, "max": 40, "colors": ["#3b4cc0", "#f6f6c0", "#b40426"]}
+        with tempfile.TemporaryDirectory() as d:
+            lossless, lossy = Path(d) / "a.webp", Path(d) / "b.webp"
+            render.to_webp(v, spec, lossless, lossy=False)
+            render.to_webp(v, spec, lossy, lossy=True, quality=85)
+            self.assertLess(lossy.stat().st_size, lossless.stat().st_size * 0.7)
+            with Image.open(lossless) as a, Image.open(lossy) as b:
+                diff = np.abs(np.asarray(a.convert("RGB")).astype(int) - np.asarray(b.convert("RGB")).astype(int))
+        self.assertLess(diff.mean(), 3.0)
+
+
 class ValuesTests(unittest.TestCase):
     def test_roundtrip_missing_and_clipping(self):
         a = np.array([[-12.34, 25.0], [np.nan, 99.0]])
-        img = values.encode_stack([a, None], 2, 2, -40, 55)
-        self.assertEqual(img.size, (2, 4))  # 2 pasos apilados
+        img = values.encode_step(a, -40, 55)
+        self.assertEqual(img.size, (2, 2))
         px = np.asarray(img)
         v = lambda y, x: values.decode_cell(px[y, x], -40, 55)
-        self.assertAlmostEqual(v(0, 0), -12.34, delta=0.002)
-        self.assertAlmostEqual(v(0, 1), 25.0, delta=0.002)
-        self.assertIsNone(v(1, 0))           # NaN
-        self.assertAlmostEqual(v(1, 1), 55.0, delta=0.002)  # recortado al rango
-        self.assertIsNone(v(2, 0))           # paso ausente
+        self.assertAlmostEqual(v(0, 0), -12.34, delta=0.025)      # 12 bit sobre 95 °C → paso de 0,023
+        self.assertAlmostEqual(v(0, 1), 25.0, delta=0.025)
+        self.assertIsNone(v(1, 0))                                # NaN
+        self.assertAlmostEqual(v(1, 1), 55.0, delta=0.025)        # recortado al rango
+        self.assertIsNone(values.encode_step(None, -40, 55))      # paso ausente
+
+    def test_webp_lossless_roundtrip(self):
+        a = np.linspace(-30, 50, 64 * 48).reshape(48, 64)
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "s.webp"
+            self.assertTrue(values.save_step(a, -40, 55, path))
+            self.assertFalse(values.save_step(None, -40, 55, Path(d) / "x.webp"))
+            self.assertFalse((Path(d) / "x.webp").exists())
+            with Image.open(path) as im:
+                px = np.asarray(im.convert("RGB"))
+        got = np.array([[values.decode_cell(px[y, x], -40, 55) for x in range(64)] for y in range(48)])
+        self.assertLess(np.abs(got - a).max(), 0.025)
 
 
 class ContourTests(unittest.TestCase):
@@ -206,30 +245,36 @@ class BuildTests(unittest.TestCase):
                               "relative_humidity_2m", "cape", "freezing_level", "snowfall", "temperature_850", "geopotential_500"})
             # Componentes del viento: solo rejilla de valores (sin imágenes ni entrada de menú).
             self.assertFalse((out / "frames" / "wind_u_10m").exists())
-            self.assertTrue((out / "values" / "wind_u_10m.png").exists())
-            self.assertEqual(m["wind"]["u"], {"id": "wind_u_10m", "vmin": -80, "vmax": 80})
+            self.assertTrue((out / "values" / "wind_u_10m" / "000.webp").exists())
+            wu = m["wind"]["u"]
+            self.assertEqual((wu["id"], wu["vmin"], wu["vmax"]), ("wind_u_10m", -80, 80))
+            self.assertEqual(wu["grid"]["dlon"], 2 * m["grid"]["dlon"])      # media resolución para las partículas
             man = json.loads((out / "manifest.json").read_text())
             self.assertEqual(man["run"], RUN)
             self.assertFalse(man["sample"])
             w, h = man["imageSize"]["width"], man["imageSize"]["height"]
             for v in man["variables"]:
                 for s in steps:  # también rachas en +0 h (copia del primer paso disponible)
-                    with Image.open(out / "frames" / v["id"] / f"{s:03d}.png") as im:
+                    with Image.open(out / "frames" / v["id"] / f"{s:03d}.webp") as im:
                         self.assertEqual(im.size, (w, h))
             self.assertEqual(man["grid"]["nx"] > 2 and man["grid"]["ny"] > 2, True)
             self.assertEqual(man["isobars"]["interval"], 4)
             for st in steps:
                 self.assertTrue((out / "isobars" / f"{st:03d}.json").exists())
-            with Image.open(out / "values" / "temperature_2m.png") as vi:
-                self.assertEqual(vi.size, (man["grid"]["nx"], man["grid"]["ny"] * len(steps)))
-                cell = vi.getpixel((man["grid"]["nx"] // 2, man["grid"]["ny"] // 2))  # paso 0
+            for st in steps:   # un fichero de valores por paso, con la rejilla nativa
+                with Image.open(out / "values" / "temperature_2m" / f"{st:03d}.webp") as vi:
+                    self.assertEqual(vi.size, (man["grid"]["nx"], man["grid"]["ny"]))
+            with Image.open(out / "values" / "temperature_2m" / "000.webp") as vi:
+                cell = vi.convert("RGB").getpixel((man["grid"]["nx"] // 2, man["grid"]["ny"] // 2))
             t = values.decode_cell(cell, -40, 55)
             self.assertTrue(10 < t < 30, t)
             # Viento 3-4-5 → 5 m/s = 18 km/h; precipitación 2 mm/h.
             def mid_value(var, s):
                 spec = next(x for x in man["variables"] if x["id"] == var)
-                with Image.open(out / "frames" / var / f"{s:03d}.png") as px:
-                    idx = px.getpixel((w // 2, h // 2))
+                with Image.open(out / "frames" / var / f"{s:03d}.webp") as px:
+                    rgb = px.convert("RGBA").getpixel((w // 2, h // 2))[:3]
+                pal = render.palette(next(c for c in config.VARIABLES if c["id"] == var)["colors"])[:255].astype(int)
+                idx = int(np.abs(pal - np.array(rgb)).sum(1).argmin())      # índice de rampa más cercano al color
                 return spec["min"] + idx / 254 * (spec["max"] - spec["min"])
             self.assertAlmostEqual(mid_value("wind_speed_10m", 1), 18.0, delta=0.4)
             self.assertAlmostEqual(mid_value("precipitation", 2), 2.0, delta=0.05)
@@ -239,9 +284,9 @@ class BuildTests(unittest.TestCase):
             self.assertAlmostEqual(mid_value("geopotential_500", 1), 550.0, delta=0.5)
             self.assertAlmostEqual(mid_value("cape", 1), 500.0, delta=10)
             # Valores del cursor del viento (m/s): U=3, V=4.
-            with Image.open(out / "values" / "wind_u_10m.png") as vi:
-                g = man["grid"]
-                self.assertAlmostEqual(values.decode_cell(vi.getpixel((g["nx"] // 2, g["ny"] // 2)), -80, 80), 3.0, delta=0.01)
+            with Image.open(out / "values" / "wind_u_10m" / "001.webp") as vi:
+                g = wu["grid"]
+                self.assertAlmostEqual(values.decode_cell(vi.convert("RGB").getpixel((g["nx"] // 2, g["ny"] // 2)), -80, 80), 3.0, delta=0.05)
 
 
 class DwdTests(unittest.TestCase):

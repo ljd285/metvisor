@@ -14,6 +14,8 @@ publican como imágenes en GitHub Pages. Plan completo: [`docs/PLAN.md`](docs/PL
   transparentes (`hide_below` en `pipeline/config.py`); buscador de lugares (Open-Meteo Geocoding) y marcador arrastrable
   para el meteograma.
 
+- Datos ligeros: fotogramas WebP (con pérdida en las variables suaves), rejillas de valores de 12 bit por paso (solo se descarga el paso
+  que se consulta), URLs con la versión de la pasada para no mezclar ficheros en la caché del navegador.
 - Isobaras con etiqueta (hPa) cada ~500 km a lo largo de cada línea, giradas según el trazo; se dibujan en un canvas propio
   (`web/js/isolabels.js`) para no depender de servidores de tipos de letra.
 - Móvil: menú lateral con botón ✕ y fondo para cerrarlo, buscador a ancho completo, controles táctiles de 40+ px, valor al tocar el mapa,

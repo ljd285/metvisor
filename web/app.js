@@ -117,9 +117,13 @@
 
   // ---------- Fotogramas ----------
   var frames = {};
+  // La versión (instante de generación) en la URL evita mezclar ficheros de dos pasadas por culpa de la caché del navegador.
+  function dataUrl(path) { return path + '?v=' + encodeURIComponent(manifest.generated || manifest.run || ''); }
+  function stepName(i) { return String(manifest.steps[i]).padStart(3, '0'); }
+
   function frame(v, i) {
     if (!manifest.sample) {
-      return 'data/frames/' + v.id + '/' + String(manifest.steps[i]).padStart(3, '0') + '.png';
+      return dataUrl('data/frames/' + v.id + '/' + stepName(i) + '.' + ((manifest.formats && manifest.formats.frame) || 'png'));
     }
     var k = v.id + ':' + i;
     return frames[k] || (frames[k] = Sample.render(v, manifest.steps[i]));
@@ -137,22 +141,30 @@
   }
 
   // ---------- Valor bajo el cursor ----------
-  var valueData = {};   // variable → {px, w, h}
+  // Una imagen pequeña por variable y paso: solo se descarga la del paso que se está mirando.
+  var valueData = {};   // 'variable:paso' → {px, w, h} | false (sin dato)
   var loading = {};
-  function ensureValues(v) {
-    if (!manifest.grid) return Promise.resolve();
-    if (valueData[v.id]) return Promise.resolve();
-    if (!loading[v.id]) {
-      loading[v.id] = ValueGrid.load('data/values/' + v.id + '.png')
-        .then(function (d) { valueData[v.id] = d; })
-        .catch(function () { /* sin rejilla: no se muestra valor */ });
+  var MAX_CACHED = 24;
+  function valueKey(v, i) { return v.id + ':' + i; }
+  function ensureValues(v, i) {
+    var k = valueKey(v, i);
+    if (!manifest.grid || k in valueData) return Promise.resolve();
+    if (!loading[k]) {
+      loading[k] = ValueGrid.load(dataUrl('data/values/' + v.id + '/' + stepName(i) + '.webp'))
+        .then(function (d) {
+          valueData[k] = d;
+          var keys = Object.keys(valueData);
+          if (keys.length > MAX_CACHED) delete valueData[keys[0]];   // la más antigua
+        })
+        .catch(function () { valueData[k] = false; })   // sin fichero para ese paso: no se reintenta
+        .then(function () { delete loading[k]; });
     }
-    return loading[v.id];
+    return loading[k];
   }
   function valueAt(lngLat) {
-    var v = manifest.variables[state.v], d = valueData[v.id];
+    var v = manifest.variables[state.v], d = valueData[valueKey(v, state.t)];
     if (!d) return null;
-    return ValueGrid.sample(d.px, d.w, manifest.grid, v, state.t, lngLat.lat, lngLat.lng);
+    return ValueGrid.sample(d.px, d.w, manifest.grid, v, lngLat.lat, lngLat.lng);
   }
   var DECIMALS = { '°C': 1, 'km/h': 1, 'hPa': 1, 'mm/h': 2, 'dam': 1 };
   function fmt(x, unit) {
@@ -165,9 +177,11 @@
     if (!manifest.grid) { el.hidden = true; return; }
     lastEvent = e;
     el.style.left = e.point.x + 'px'; el.style.top = e.point.y + 'px';
-    if (!valueData[v.id]) {   // primera vez: se descarga y se pinta al terminar
+    var key = valueKey(v, state.t);
+    if (!(key in valueData)) {   // este paso aún no está descargado: se pide y se pinta al terminar
       el.textContent = '…'; el.hidden = false;
-      ensureValues(v).then(function () { if (lastEvent === e && state.v === manifest.variables.indexOf(v)) renderValue(e); });
+      var t = state.t;
+      ensureValues(v, t).then(function () { if (lastEvent === e && state.v === manifest.variables.indexOf(v) && state.t === t) renderValue(e); });
       return;
     }
     var val = valueAt(e.lngLat);
@@ -197,7 +211,7 @@
     if (!state.iso) return;
     var i = state.t, token = ++isoToken, name = String(manifest.steps[i]).padStart(3, '0');
     var get = isoCache[name] ? Promise.resolve(isoCache[name]) :
-      fetch('data/isobars/' + name + '.json').then(function (r) { return r.json(); }).then(function (g) { return (isoCache[name] = g); });
+      fetch(dataUrl('data/isobars/' + name + '.json')).then(function (r) { return r.json(); }).then(function (g) { return (isoCache[name] = g); });
     get.then(function (g) {
       if (token !== isoToken) return;
       map.getSource('isobars').setData(g);
@@ -221,13 +235,28 @@
   }
 
   // ---------- Viento animado ----------
-  var particles, isoLabels, windGrids = null, windLoading = false;
+  var particles, isoLabels, windCache = {}, windLoading = {}, windLast = null;
+  // Viento (u, v) del paso actual; mientras llega el siguiente, las partículas siguen con el último cargado.
   function windAt(lat, lng) {
-    var g = windGrids, wd = manifest.wind;
+    var g = windCache[state.t] || windLast, wd = manifest.wind;
     if (!g) return null;
-    var u = ValueGrid.sample(g.u.px, g.u.w, manifest.grid, wd.u, state.t, lat, lng);
-    var v = ValueGrid.sample(g.v.px, g.v.w, manifest.grid, wd.v, state.t, lat, lng);
+    var u = ValueGrid.sample(g.u.px, g.u.w, wd.u.grid, wd.u, lat, lng);
+    var v = ValueGrid.sample(g.v.px, g.v.w, wd.v.grid, wd.v, lat, lng);
     return u == null || v == null ? null : [u, v];
+  }
+  function loadWind(i) {
+    if (windCache[i]) return Promise.resolve();
+    if (!windLoading[i]) {
+      var wd = manifest.wind;
+      windLoading[i] = Promise.all([wd.u, wd.v].map(function (c) {
+        return ValueGrid.load(dataUrl('data/values/' + c.id + '/' + stepName(i) + '.webp'));
+      })).then(function (r) {
+        windCache[i] = windLast = { u: r[0], v: r[1] };
+        var keys = Object.keys(windCache);
+        if (keys.length > 8) delete windCache[keys[0]];
+      }).catch(function () { /* paso sin datos */ }).then(function () { delete windLoading[i]; });
+    }
+    return windLoading[i];
   }
   function sizeWind() {
     var w = $('stage').clientWidth, h = $('stage').clientHeight;
@@ -238,13 +267,11 @@
     if (!manifest.wind || !manifest.grid) return;
     if (!state.wind) { if (particles) particles.stop(); return; }
     if (!particles) { particles = Particles.create($('windCanvas'), map, windAt); sizeWind(); }
-    if (windGrids) { particles.start(); return; }
-    if (windLoading) return;
-    windLoading = true;
-    Promise.all([ValueGrid.load('data/values/' + manifest.wind.u.id + '.png'), ValueGrid.load('data/values/' + manifest.wind.v.id + '.png')])
-      .then(function (r) { windGrids = { u: r[0], v: r[1] }; if (state.wind) particles.start(); })
-      .catch(function () { state.wind = false; $('windToggle').checked = false; })
-      .then(function () { windLoading = false; });
+    loadWind(state.t).then(function () {
+      if (!state.wind) return;
+      if (windLast) particles.start();
+      else { state.wind = false; $('windToggle').checked = false; writeHash(); }   // no hay datos de viento
+    });
   }
 
   function applyRelief() {
@@ -351,6 +378,7 @@
     $('legendTicks').innerHTML = '<span>' + v.min + '</span><span>' + mid + '</span><span>' + v.max + '</span>';
     if (source) source.updateImage({ url: frame(v, state.t), coordinates: coords() });
     preload(v); applyIso(); drawMeteogram();
+    if (state.wind && particles) { loadWind(state.t); loadWind((state.t + 1) % manifest.steps.length); }
     writeHash();
   }
 
@@ -436,7 +464,7 @@
 
   // ---------- Arranque ----------
   function loadManifest() {
-    return fetch('data/manifest.json').then(function (r) {
+    return fetch('data/manifest.json', { cache: 'no-cache' }).then(function (r) {
       if (!r.ok) throw new Error('sin datos reales');
       return r.json();
     }).catch(function () { return fetch('manifest.json').then(function (r) { return r.json(); }); });
