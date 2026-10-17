@@ -24,7 +24,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid #7cc4e6; outline-
 
 #stage { position: relative; min-width: 0; }
 #map { position: absolute; inset: 0; }
-#windCanvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+#isoCanvas, #windCanvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
 .chip, .panel { position: absolute; background: var(--ui); color: var(--ui-fg); border-radius: 6px; z-index: 2; }
 .chip { padding: 5px 10px; }
 #timeChip { left: 12px; top: 12px; }

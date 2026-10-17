@@ -5,7 +5,8 @@ Descarga ICON-EU (rejilla regular lat-lon) de `opendata.dwd.de` y genera en `web
 - `manifest.json`: pasada, pasos, límites de la imagen, variables y paletas.
 - `frames/<variable>/<paso>.png`: PNG paletizado en Web Mercator (índice 255 = sin dato).
 - `values/<variable>.png`: rejilla nativa con el valor de cada celda en 16 bit (R,G; B=255 sin dato), pasos apilados en vertical. La web la lee para mostrar el valor bajo el cursor.
-- `isobars/<paso>.json`: isobaras cada 4 hPa (GeoJSON, marching squares sobre la presión a nivel del mar).
+- `isobars/<paso>.json`: isobaras cada 4 hPa (GeoJSON, marching squares sobre la presión a nivel del mar). Los segmentos se unen en
+  polilíneas y sobre cada una se colocan puntos de etiqueta (`Point` con `p` = hPa y `a` = ángulo en pantalla, entre -90° y 90°).
 
 ```bash
 python -m venv .venv && . .venv/bin/activate

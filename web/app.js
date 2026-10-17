@@ -193,11 +193,16 @@
   function applyIso() {
     if (!ready || !map.getLayer('isobars')) return;
     map.setLayoutProperty('isobars', 'visibility', state.iso ? 'visible' : 'none');
+    isoLabels.setVisible(state.iso);
     if (!state.iso) return;
     var i = state.t, token = ++isoToken, name = String(manifest.steps[i]).padStart(3, '0');
     var get = isoCache[name] ? Promise.resolve(isoCache[name]) :
       fetch('data/isobars/' + name + '.json').then(function (r) { return r.json(); }).then(function (g) { return (isoCache[name] = g); });
-    get.then(function (g) { if (token === isoToken) map.getSource('isobars').setData(g); }).catch(function () {});
+    get.then(function (g) {
+      if (token !== isoToken) return;
+      map.getSource('isobars').setData(g);
+      isoLabels.set(g.features.filter(function (f) { return f.geometry.type === 'Point'; }));
+    }).catch(function () {});
   }
 
   // Dos fondos intercambiables: «esri» (gris claro + etiquetas aparte) y «osm» (etiquetas incluidas).
@@ -216,7 +221,7 @@
   }
 
   // ---------- Viento animado ----------
-  var particles, windGrids = null, windLoading = false;
+  var particles, isoLabels, windGrids = null, windLoading = false;
   function windAt(lat, lng) {
     var g = windGrids, wd = manifest.wind;
     if (!g) return null;
@@ -225,7 +230,9 @@
     return u == null || v == null ? null : [u, v];
   }
   function sizeWind() {
-    if (particles) particles.resize($('stage').clientWidth, $('stage').clientHeight);
+    var w = $('stage').clientWidth, h = $('stage').clientHeight;
+    if (particles) particles.resize(w, h);
+    if (isoLabels) isoLabels.resize(w, h);
   }
   function applyWind() {
     if (!manifest.wind || !manifest.grid) return;
@@ -385,6 +392,8 @@
     else opts.bounds = [REGIONS[0].b[0], REGIONS[0].b[1], REGIONS[0].b[2], REGIONS[0].b[3]];
     map = new maplibregl.Map(opts);
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    isoLabels = IsoLabels.create($('isoCanvas'), map);
+    sizeWind();
     map.on('moveend', writeHash);
     map.on('move', function () { if (particles && particles.running) particles.clear(); });
     window.addEventListener('resize', sizeWind);

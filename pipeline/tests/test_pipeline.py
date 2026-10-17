@@ -125,15 +125,50 @@ class ContourTests(unittest.TestCase):
         z[0, 0] = np.nan
         self.assertEqual(contours.segments(z, 0.5), [])
 
+    def test_chains_join_segments_into_one_closed_ring(self):
+        n = 61
+        yy, xx = np.mgrid[0:n, 0:n]
+        z = np.hypot(xx - 30, yy - 30)
+        ch = contours.chains(contours.segments(z, 10.3))   # 10.3: evita pasar justo por vértices de la rejilla
+        self.assertEqual(len(ch), 1)
+        self.assertEqual(ch[0][0], ch[0][-1])      # anillo cerrado
+        self.assertGreater(len(ch[0]), 40)
+
+    def test_chains_keep_open_lines_separate(self):
+        z = np.add.outer(np.arange(10.0), np.zeros(10))       # isolíneas horizontales
+        ch = contours.chains(contours.segments(z, 4.5))
+        self.assertEqual(len(ch), 1)
+        self.assertNotEqual(ch[0][0], ch[0][-1])
+
+    def test_labels_angles_and_margins(self):
+        bounds = (-10.0, 35.0, 5.0, 45.0)
+        horiz = [(lon, 40.0) for lon in np.linspace(-10, 5, 40)]       # isobara horizontal
+        lbl = contours.label_points(horiz, bounds)
+        self.assertGreaterEqual(len(lbl), 2)                           # ≈1300 km → 2 etiquetas a 500 km
+        self.assertTrue(all(abs(a) < 0.5 for _, _, a in lbl))
+        vert = [(0.0, lat) for lat in np.linspace(35, 45, 40)]          # isobara vertical: ángulo ±90 → 90
+        self.assertTrue(all(abs(abs(a) - 90) < 0.5 for _, _, a in contours.label_points(vert, bounds)))
+        # una diagonal ascendente hacia el NE se ve «subiendo» en pantalla: ángulo negativo (y crece hacia abajo)
+        diag = [(-5 + t, 38 + t) for t in np.linspace(0, 8, 40)]
+        self.assertTrue(all(-90 < a < 0 for _, _, a in contours.label_points(diag, bounds)))
+        # sin etiquetas pegadas al borde del dominio ni en líneas cortas
+        self.assertEqual(contours.label_points([(-9.9, 40.0), (-9.8, 40.0)], bounds), [])
+        edge = [(lon, 35.2) for lon in np.linspace(-10, 5, 40)]
+        self.assertEqual(contours.label_points(edge, bounds), [])
+
     def test_isobars_geojson(self):
         f = grib.Field(1000 + np.add.outer(np.arange(30) * 0.5, np.arange(40) * 0.3), 44.0, -10.0, 0.125, 0.125)
         gj = contours.isobars(f, interval=4, stride=2)
-        levels = [ft["properties"]["p"] for ft in gj["features"]]
+        levels = [ft["properties"]["p"] for ft in gj["features"] if ft["geometry"]["type"] == "MultiLineString"]
         self.assertEqual(levels, sorted(levels))
         self.assertTrue(all(p % 4 == 0 for p in levels))
         self.assertTrue(any(ft["properties"]["major"] for ft in gj["features"]))
+        self.assertTrue(all(len(ln) >= 2 for ft in gj["features"][:len(levels)] for ln in ft["geometry"]["coordinates"]))
         lon, lat = gj["features"][0]["geometry"]["coordinates"][0][0]
         self.assertTrue(-10.5 < lon < -4 and 38 < lat < 44.5)
+        pts = [ft for ft in gj["features"] if ft["geometry"]["type"] == "Point"]
+        self.assertTrue(pts and all("a" in ft["properties"] and "p" in ft["properties"] for ft in pts))
+        self.assertTrue(all(ft["geometry"]["type"] != "LineString" for ft in gj["features"]))
 
 
 class BuildTests(unittest.TestCase):
